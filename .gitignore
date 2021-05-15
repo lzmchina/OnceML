@@ -20,7 +20,8 @@ __pycache__/*
 .pydevproject
 .settings
 .idea
-.vscode
+.vscode/*
+!.vscode/*.code-snippets
 tags
 
 # Package files
@@ -51,3 +52,4 @@ MANIFEST
 # Per-project virtualenvs
 .venv*/
 .conda*/
+
