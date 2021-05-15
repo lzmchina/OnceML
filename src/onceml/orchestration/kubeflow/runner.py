@@ -6,6 +6,7 @@ from kfp import compiler
 from kfp import dsl
 import os
 import onceml.utils.json_utils as json_utils
+import onceml.orchestration.kubeflow.kfp_component as Kfp_component
 
 class KubeflowRunner(BaseRunner):
     def __init__(self, output_dir: str=None):
@@ -20,6 +21,8 @@ class KubeflowRunner(BaseRunner):
 
         {output_dir}/outputs/:为每个pipline的运行数据，在这个目录下会按照{task}/{model}/{component}三级目录区分
 
+        https://github.com/kubeflow/pipelines/blob/master/samples/core/output_a_directory/output_a_directory.py
+        
         Args
         -------
         output_dir：workflow yaml存放的路径
@@ -61,7 +64,14 @@ class KubeflowRunner(BaseRunner):
         component_to_kfp_op = {}
         for component in pipeline.components:
             #ktp_component=
-            pass
+            depends_on={}
+            Do_deploytype=[]
+            for upstreamComponent in component.upstreamComponents:
+                if upstreamComponent.deploytype=="Do":
+                    Do_deploytype.append(upstreamComponent.id)
+                depends_on[upstreamComponent.id]=component_to_kfp_op[upstreamComponent.id]
+            kfp_component=Kfp_component.KfpComponent(pipline_root=pipeline.rootdir,component=component,depends_on=depends_on,Do_deploytype=Do_deploytype)
+            component_to_kfp_op[component.id]=kfp_component.container_op
     def deploy(self, pipeline: Pipeline):
         '''将一个pipline编译成kubeflow的yaml资源
 
@@ -76,6 +86,6 @@ class KubeflowRunner(BaseRunner):
         self._compiler._create_and_write_workflow(
             pipeline_func=lambda:self._construct_pipeline_graph(pipeline),
             pipeline_name=pipeline.id,
-            params_list=self.kfp_parameters,
+            #params_list=self.kfp_parameters,
             package_path=os.path.join(self._output_dir,'yamls',file_name)
         )

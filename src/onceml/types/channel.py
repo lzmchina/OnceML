@@ -19,7 +19,7 @@ class Channels(Jsonable):
     def __init__(self,data:dict):
         if not isinstance(data,dict):
             raise TypeError
-        self._data=dict
+        self._data=dict()
     def update(self,key,value):
         self._data.update({key:value})
     def to_json_dict(self):

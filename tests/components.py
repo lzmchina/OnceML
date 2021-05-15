@@ -23,3 +23,11 @@ class myExecutor3(BaseExecutor):
 class myComponent3(BaseComponent):
     def __init__(self, executor, inputs=None, **args):
         super().__init__(executor=executor, inputs=inputs, **args)
+class myExecutor4(BaseExecutor):
+    def Cycle(self, params, input_channels=None, input_artifacts=None):
+        print('current component:',self.__class__)
+        print(params)
+        return super().Do(params, input_channels=input_channels, input_artifacts=input_artifacts)
+class myComponent4(BaseComponent):
+    def __init__(self, executor, inputs=None, **args):
+        super().__init__(executor=executor, inputs=inputs, **args)
