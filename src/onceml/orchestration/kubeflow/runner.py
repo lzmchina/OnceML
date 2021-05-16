@@ -94,5 +94,7 @@ class KubeflowRunner(BaseRunner):
             #params_list=self.kfp_parameters,
             package_path=os.path.join(self._output_dir,'yamls',file_name)
         )
-        #在kfp中建议onceml专属的experiment
-        kfp_ops.create_experiment(self.)
+        #在kfp中创建onceml专属的experiment
+        kfp_ops.ensure_experiment(self._kfp_client,kfp_config.EXPERIMENT)
+        #在kfp中创建运行相应的pipline，并且将其归属于kfp_config.EXPERIMENT中
+        kfp_ops.ensure_pipline(self._kfp_client,os.path.join(self._output_dir,'yamls',file_name),pipeline.id)
