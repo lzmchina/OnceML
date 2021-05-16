@@ -1,4 +1,5 @@
 import kfp
+from kubernetes.config import kube_config
 from onceml.orchestration.runner import BaseRunner
 from onceml.orchestration import Pipeline
 from onceml.components import BaseComponent
@@ -7,9 +8,11 @@ from kfp import dsl
 import os
 import onceml.utils.json_utils as json_utils
 import onceml.orchestration.kubeflow.kfp_component as Kfp_component
-
+import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
+import onceml.utils.k8s_ops as k8s_ops
+import onceml.orchestration.kubeflow.kfp_config as kfp_config
 class KubeflowRunner(BaseRunner):
-    def __init__(self, output_dir: str=None):
+    def __init__(self, output_dir: str=None,kfp_host:str=None):
 
         """负责将一个pipline转换成kubeflow workflow资源
         description
@@ -27,6 +30,8 @@ class KubeflowRunner(BaseRunner):
         -------
         output_dir：workflow yaml存放的路径
 
+        kfp_host:kfp 的mlpipline svc的ip地址,如果不指定，会自己使用kubernetes python sdk搜索
+
         Returns
         -------
         
@@ -36,6 +41,8 @@ class KubeflowRunner(BaseRunner):
         """
         
         self._compiler = compiler.Compiler()
+        kfp_host=kfp_host or k8s_ops.get_kfp_host(kfp_config.SVCNAME,namespace=kfp_config.NAMESPACE)
+        self._kfp_client=kfp.Client(kfp_host)
         self._parameters = {}
         self.kfp_parameters = []
         self._output_dir = output_dir or os.getcwd()
@@ -81,11 +88,11 @@ class KubeflowRunner(BaseRunner):
         output_path=os.path.join(self._output_dir,pipeline.rootdir)
         os.makedirs(output_path,exist_ok=True)
         file_name = pipeline.id+'.yaml'
-        #dsl_pipeline_root=
-        print(file_name)
         self._compiler._create_and_write_workflow(
             pipeline_func=lambda:self._construct_pipeline_graph(pipeline),
             pipeline_name=pipeline.id,
             #params_list=self.kfp_parameters,
             package_path=os.path.join(self._output_dir,'yamls',file_name)
         )
+        #在kfp中建议onceml专属的experiment
+        kfp_ops.create_experiment(self.)

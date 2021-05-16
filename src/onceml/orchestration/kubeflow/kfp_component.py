@@ -1,6 +1,6 @@
 from kfp import dsl
 from typing import Set,Dict,List
-
+from kubernetes.client.models import V1ContainerPort
 import onceml.components.base.base_component as base_component
 import onceml.utils.json_utils as json_utils
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
@@ -65,6 +65,9 @@ class KfpComponent:
                     'mlpipeline-ui-metadata':'%s/%s/result.json'%(pipline_root,component.id),
                     'channels':'%s/%s/result.json'%(pipline_root,component.id),
                     'artifact':'%s/%s/artifact'%(pipline_root,component.id)
+                },
+                container_kwargs={
+                    'working_dir':kfp_config.WORKINGDIR,
                 }
             )
             for c_id,v in depends_on.items():
@@ -93,7 +96,10 @@ class KfpComponent:
                     'artifact':'%s/%s/artifact'%(pipline_root,component.id)
                 },
                 container_kwargs={
-
+                    'working_dir':kfp_config.WORKINGDIR,
+                    'ports':[
+                        V1ContainerPort(container_port=kfp_config.SERVERPORT)#开放端口
+                    ]
                 }
             )
             for c_id,v in depends_on.items():
