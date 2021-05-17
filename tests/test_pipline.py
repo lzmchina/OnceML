@@ -1,15 +1,15 @@
-from onceml.orchestration import Pipline
+from onceml.orchestration import Pipeline
 
 import pytest
 from .components import myComponent1, myComponent2, myComponent3, myExecutor2, myExecutor1, myExecutor3
 
 
 def test_pipline_parameter():
-    print(type(Pipline))
+    print(type(Pipeline))
     with pytest.raises(TypeError):
-        Pipline(task_name='1', model_name=2)
+        Pipeline(task_name='1', model_name=2)
     with pytest.raises(TypeError):
-        Pipline(task_name=1, model_name='2', components=[])
+        Pipeline(task_name=1, model_name='2', components=[])
 
 
 def test_pipline_runtime():
