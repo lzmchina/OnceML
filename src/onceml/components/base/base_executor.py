@@ -17,17 +17,14 @@ class BaseExecutor:
     BaseExecutor接收到组件的params、Channels、Artifact，以及依赖组件的Channels、Artifact
 
     """
-    def __init__(self):
-        if(self.__class__.Do!=BaseExecutor.Do):
-            self._type='Do'
-        else:
-            self._type='Cycle'
+    def __init__(self,deploytype:str):
+            self._type=deploytype
         #print(self._type)
-    def __new__(cls):
+    # def __new__(cls):
 
-        if (bool(cls.Do==BaseExecutor.Do)==bool(cls.Cycle==BaseExecutor.Cycle)):
-            raise  SyntaxError('Do与Cycle必须有且只能有一个被重写') 
-        return super().__new__(cls)
+    #     if (bool(cls.Do==BaseExecutor.Do)==bool(cls.Cycle==BaseExecutor.Cycle)):
+    #         raise  SyntaxError('Do与Cycle必须有且只能有一个被重写') 
+    #     return super().__new__(cls)
     def Do(self,params:dict,input_channels:Optional[Dict[str,Channels]]=None,input_artifacts:Optional[Dict[str,Artifact]]=None)->Channels:
         """
         description

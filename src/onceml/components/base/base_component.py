@@ -12,7 +12,7 @@ from onceml.types import Artifact, Channels, OutputChannel
 from typing import List, Optional
 from .base_executor import BaseExecutor
 from onceml.utils import Jsonable
-
+import onceml.types.exception as exception
 class BaseComponent(Jsonable):
     """BaseComponent是最基本的组件
 
@@ -21,17 +21,19 @@ class BaseComponent(Jsonable):
     总结一下：Channel、Artifact是在运行过程中产生的数据结构；param是在运行前设置好的参数；组件的inputs是依赖的组件，outputs是返回组件的channel、artifact
     """
 
-    def __init__(self, executor: BaseExecutor.__class__, inputs: Optional[List] = None, instance_name: str = None, **args):
+    def __init__(self, executor: BaseExecutor.__class__, inputs: Optional[List] = None, instance_name: str = None,shared:bool=False, **args):
         """
         description
         ---------
-        一个基本的component就是pipline中的最小单元，各个component存在数据依赖，却又独立运行
+        一个基本的component就是pipleine中的最小单元，各个component存在数据依赖，却又独立运行
 
         Args
         -------
         inputs (List[BaseComponent]):依赖的组件，假如有的话
 
         instance_name (str): 给组件取一个名字，会作为id属性（如果未指定，则由系统分配）
+
+        shared(bool):是否会共享组件的数据
 
         args :自行定义各种参数，component会检查每个参数的type，如果是OutputChannel，就是组件Channel的一个属性，其他则认为是params，返回给组件运行时使用
 
@@ -64,16 +66,19 @@ class BaseComponent(Jsonable):
                 self._params[key] = value
         # 初始化Artifact
         self._artifact = Artifact()
+        # 组件状态
         self._state = []
-
-        # 找到依赖的组件后，就该将他们的channel、artifact加入进来，这个具体的由pipline操作
+        #组件是否会共享
+        self._datashared=shared
+        # 找到依赖的组件后，就该将他们的channel、artifact加入进来，这个具体的由pipeline操作
         self._dependentChannels = {}
         self._dependentArtifacts = {}
         # 拿到executor class
         self._executor_cls = executor
+        self._deploytype=None
         #检查executor class是否只重写了一个函数
-        if (bool(self._executor_cls.Do==BaseExecutor.Do)==bool(self._executor_cls.Cycle==BaseExecutor.Cycle)):
-            raise  SyntaxError('Do与Cycle必须有且只能有一个被重写') 
+        # if (bool(self._executor_cls.Do==BaseExecutor.Do)==bool(self._executor_cls.Cycle==BaseExecutor.Cycle)):
+        #     raise  SyntaxError('Do与Cycle必须有且只能有一个被重写')
         #当前节点的上游节点与下游节点
         self._upstreamComponents = set()
         self._downstreamComponents = set()
@@ -127,7 +132,7 @@ class BaseComponent(Jsonable):
     def id(self):
         """组件的唯一id
 
-        可以由组件的构造函数的instance_name指定，或者由系统分配，组件的id在pipline里唯一
+        可以由组件的构造函数的instance_name指定，或者由系统分配，组件的id在pipeline里唯一
         """
         return self._id
     @property
@@ -143,11 +148,21 @@ class BaseComponent(Jsonable):
 
         Cycle：循环执行
         '''
-        if(self._executor_cls.Do!=BaseExecutor.Do):
-            return 'Do'
-        else:
-            return 'Cycle'
-    
+        # if(self._executor_cls.Do!=BaseExecutor.Do):
+        #     return 'Do'
+        # else:
+        #     return 'Cycle'
+        return self._deploytype
+    @deploytype.setter
+    def deploytype(self,d_type):
+        if d_type not in ['Do','Cycle']:
+            raise exception.DeployTypeError('DeployType只能是Do或者Cycle')
+        self._deploytype=d_type
+    @property
+    def datashared(self)->bool:
+        '''组件的数据是否会共享出来
+        '''
+        return self._datashared
     @id.setter
     def id(self, _id: str):
         _id = _id or ''

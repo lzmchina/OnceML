@@ -8,6 +8,6 @@ class BaseRunner(abc.ABC):
         pass
     @abc.abstractmethod
     def deploy(self,pipeline):
-        """将一个pipline部署在某个编排框架里
+        """将一个pipeline部署在某个编排框架里
         """
         pass

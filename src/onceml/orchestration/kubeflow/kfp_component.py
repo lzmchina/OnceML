@@ -9,10 +9,10 @@ import onceml.types.artifact as artifact
 class KfpComponent:
     '''kubeflow workflow中的一个组件
 
-    将pipline的组件转化至kfpComponent，包含执行的命令、使用的镜像、挂载的pv等信息
+    将pipeline的组件转化至kfpComponent，包含执行的命令、使用的镜像、挂载的pv等信息
     '''
 
-    def __init__(self, pipline_root:str,component: base_component.BaseComponent, depends_on: Dict[str,dsl.ContainerOp],Do_deploytype:List[str]):
+    def __init__(self, pipeline_root:str,component: base_component.BaseComponent, depends_on: Dict[str,dsl.ContainerOp],Do_deploytype:List[str]):
         """kubeflow component的表示
         description
         ---------
@@ -20,9 +20,9 @@ class KfpComponent:
 
         Args
         -------
-        pipline_root:组件所属pipline的根目录，通常为{task name}/{model name}
+        pipeline_root:组件所属pipeline的根目录，通常为{task name}/{model name}
 
-        component：本pipline的component
+        component：本pipeline的component
 
         depends_on： component依赖的其他 component的ContainerOp
 
@@ -62,9 +62,9 @@ class KfpComponent:
                 image=kfp_config.IMAGE,
                 arguments=arguments,
                 file_outputs={#存放组件的channels结果的文件，方便ui可视化
-                    'mlpipeline-ui-metadata':'%s/%s/result.json'%(pipline_root,component.id),
-                    'channels':'%s/%s/result.json'%(pipline_root,component.id),
-                    'artifact':'%s/%s/artifact'%(pipline_root,component.id)
+                    'mlpipeline-ui-metadata':'%s/%s/result.json'%(pipeline_root,component.id),
+                    'channels':'%s/%s/result.json'%(pipeline_root,component.id),
+                    'artifact':'%s/%s/artifact'%(pipeline_root,component.id)
                 },
                 container_kwargs={
                     'working_dir':kfp_config.WORKINGDIR,
@@ -91,9 +91,9 @@ class KfpComponent:
                 image=kfp_config.IMAGE,
                 arguments=arguments,
                 file_outputs={#存放组件的channels结果的文件，方便ui可视化
-                    'mlpipeline-ui-metadata':'%s/%s'%(pipline_root,component.id),
-                    'channels':'%s/%s/result.json'%(pipline_root,component.id),
-                    'artifact':'%s/%s/artifact'%(pipline_root,component.id)
+                    'mlpipeline-ui-metadata':'%s/%s'%(pipeline_root,component.id),
+                    'channels':'%s/%s/result.json'%(pipeline_root,component.id),
+                    'artifact':'%s/%s/artifact'%(pipeline_root,component.id)
                 },
                 container_kwargs={
                     'working_dir':kfp_config.WORKINGDIR,
@@ -113,4 +113,4 @@ class KfpComponent:
         #取消kfp自带的cache机制
         self.container_op.execution_options.caching_strategy.max_cache_staleness = "P0D"
         #给pod添加label，方便后续的查询
-        self.container_op.add_pod_label(name='onceml',value=('%s_%s'%(pipline_root,component.id)).replace('/','_'))
+        self.container_op.add_pod_label(name='onceml',value=('%s_%s'%(pipeline_root,component.id)).replace('/','_'))
