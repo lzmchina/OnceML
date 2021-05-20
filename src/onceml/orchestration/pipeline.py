@@ -15,7 +15,7 @@ from __future__ import unicode_literals
 from os.path import expanduser
 from typing import List, Optional, Text, Dict
 from onceml.components import BaseComponent,BaseExecutor
-from onceml.utils import topsorted_layers
+from onceml.utils.topsort import topsorted_layers
 import os
 import onceml.types.exception as exception
 import onceml.utils.pipeline_utils as pipeline_utils
@@ -130,7 +130,7 @@ class Pipeline():
         self.rootdir = tuple_name
 
     @property
-    def components(self):
+    def components(self)->List[BaseComponent]:
         """pipeline的组件
 
         这些组件按照设置的逻辑拓扑排列
@@ -201,13 +201,17 @@ class Pipeline():
         for c in self._components:
             c.execute()
             print('dependency:', c.upstreamComponents, c.downstreamComponents)
-    def static_check(self):
-        '''在deploy开始时检查pipeline
+    def custom_static_check(self):
+        '''在deploy开始前检查pipeline,通常为组件的自检
         '''
         pass
     def fill_c_deploytype_field(self,component:BaseComponent):
         if type(component)==GlobalComponent:
             logger.info('pipeline: {} 的component :{}为全局组件，别名{}中{}组件'.format(self.id,component.id,component.alias_model_name,component.alias_component_id))
+            #GlobalComponent不应具有上游组件
+            if len(component.dependentComponent)>0:
+                logger.error('GlobalComponent 不应具有上游组件')
+                raise RuntimeError()
             if not pipeline_utils.db_check_pipeline(self._task_name,component.alias_model_name):
                 #检查同一task下的model是否存在
                 logger.error('pipeline id :{}不存在 '.format('_'.join([self._task_name,component.alias_model_name])))
@@ -218,6 +222,7 @@ class Pipeline():
                 raise exception.ComponentNotFoundError()
             #然后再根据别名组件,得到他的deploytype
             component.deploytype=pipeline_utils.db_get_pipeline_component_deploytype(self._task_name,component.alias_model_name,component.alias_component_id)
+            
 
         else:
             #说明是普通的组件，直接通过executor class的信息判断
@@ -229,7 +234,14 @@ class Pipeline():
                 component.deploytype='Cycle'
     def db_store(self):
         '''将数据保存到db里
+
+        先保存组件，再保存pipeline
+        因为是先查询pipeline，所以保存得反着来
         '''
+        for component in self.components:
+            if not pipeline_utils.db_update_pipeline_component(task_name=self._task_name,model_name=self._model_name,component=component):
+                logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(self.id,component.id))
+                raise exception.DBOpTypeErrorS('数据库操作失败')
         if not pipeline_utils.db_update_pipeline(self._task_name,self._model_name):
             logger.error('数据库更新pipeline id:{}失败'.format(self.id))
             raise exception.DBOpTypeErrorS('数据库操作失败')

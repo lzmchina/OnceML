@@ -8,10 +8,11 @@
 
 @version	:0.0.1
 '''
-from onceml.types import Artifact, Channels, OutputChannel
+from onceml.types.artifact import Artifact
+from onceml.types.channel import  Channels, OutputChannel
 from typing import List, Optional
 from .base_executor import BaseExecutor
-from onceml.utils import Jsonable
+from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
 class BaseComponent(Jsonable):
     """BaseComponent是最基本的组件

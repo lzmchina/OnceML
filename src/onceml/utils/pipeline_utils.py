@@ -24,8 +24,9 @@ def db_check_pipeline_component(task_name,model_name,component):
 def db_update_pipeline_component(task_name,model_name,component):
     '''通过数据库插入某个pipeline下某个组件，以表示其存在
     '''
-    db.update('.'.join([task_name,model_name,component]),'created')
-    if db.select('.'.join([task_name,model_name,component])) is None:
+    db.update('.'.join([task_name,model_name,component.id]),'created')#标记组件被创建
+    db.update('.'.join([task_name,model_name,component.id,'deploytype']),component.deploytype)#标记组件的deploytype
+    if db.select('.'.join([task_name,model_name,component.id])) is None:
         return False
     else:
         return True

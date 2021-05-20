@@ -21,7 +21,6 @@ class Artifact(json_utils.Jsonable):
     @property
     def url(self):
         return self._url
-    @url.setter
     def setUrl(self,url:str):
         if not isinstance(url,str):
             raise TypeError("Artifact设置的url应该是一个str类型的变量")

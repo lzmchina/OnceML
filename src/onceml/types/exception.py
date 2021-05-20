@@ -6,3 +6,7 @@ class DeployTypeError(Exception):
     pass
 class DBOpTypeError(Exception):
     pass
+class FileNotFoundError(Exception):
+    pass
+class NFCNotFoundError(Exception):
+    pass

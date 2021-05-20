@@ -1,1 +1,1 @@
-from onceml.components.base import BaseComponent,BaseExecutor
+from onceml.components.base import *

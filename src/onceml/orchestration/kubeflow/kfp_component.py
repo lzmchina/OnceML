@@ -112,5 +112,5 @@ class KfpComponent:
             ))
         #取消kfp自带的cache机制
         self.container_op.execution_options.caching_strategy.max_cache_staleness = "P0D"
-        #给pod添加label，方便后续的查询
-        self.container_op.add_pod_label(name='onceml',value=('%s_%s'%(pipeline_root,component.id)).replace('/','_'))
+        #给pod添加label，方便后续的查询,value为{task name}_{model name}_{component id}
+        self.container_op.add_pod_label(name=kfp_config.COMPONENT_POD_LABEL,value=('%s_%s'%(pipeline_root,component.id)).replace('/','_'))

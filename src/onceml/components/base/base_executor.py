@@ -8,7 +8,8 @@
 
 @version	:0.0.1
 '''
-from onceml.types import Channels,Artifact
+from onceml.types.channel import Channels
+from onceml.types.artifact import Artifact
 from typing import List,Dict,Optional
 #from abc import abstractmethod
 class BaseExecutor:
