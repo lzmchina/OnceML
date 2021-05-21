@@ -8,8 +8,8 @@ import onceml.types.exception as exception
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
 from onceml.orchestration.pipeline import Pipeline
 import onceml.utils.k8s_ops as k8s_ops
-
-
+import onceml.utils.db as db
+import onceml.global_config as global_config
 def exist_experiment(client: kfp.Client, experiment_name: str):
     try:
         exp = client.get_experiment(experiment_name=experiment_name)
@@ -81,6 +81,8 @@ def ensure_pipeline(client: kfp.Client, package_path: str, pipeline: Pipeline):
         for instance in instances:
             logger.logger.info('删除已有的实例:{}'.format(instance))
             client._run_api.delete_run(id=instance)
+    #为0，说明该pipeline是第一次创建或者是被用户使用其他方法手动删除了，这时需要在数据库里删除相应信息
+
     # 然后再创建
     # client.create_run_from_pipeline_package(pipeline_file=package_path,
     #                                         arguments={},
@@ -88,7 +90,7 @@ def ensure_pipeline(client: kfp.Client, package_path: str, pipeline: Pipeline):
     #                                             [kfp_config.PROJECTDIRNAME, pipeline.id]),
     #                                         experiment_name=kfp_config.EXPERIMENT,
     #                                         )
-
+    #
 
 def ensure_pv(rootdir: str, nfc_host: str):
     '''创建供onceml使用的pv
@@ -113,3 +115,28 @@ def ensure_pv(rootdir: str, nfc_host: str):
     else:
         # 找到了，需要检查是否跟工程的目录匹配
         logger.logger.warning('目前pv：{}的host与url与当前不符'.format(pv_name))
+def change_pipeline_phase_to_created(pipeline_id:str):
+    '''将pipeline的phase切换至created
+    '''
+    db.update('.'.join(['kfp',pipeline_id.replace('_','.'),'phase']),global_config.PIPELINE_PHASES.CREATED.value)
+def change_pipeline_phase_to_running(pipeline_id:str):
+    '''将pipeline的phase切换至running
+    '''
+    db.update('.'.join(['kfp',pipeline_id.replace('_','.'),'phase']),global_config.PIPELINE_PHASES.RUNNING.value)
+def change_pipeline_phase_to_finished(pipeline_id:str):
+    '''将pipeline的phase切换至finished
+    '''
+    db.update('.'.join(['kfp',pipeline_id.replace('_','.'),'phase']),global_config.PIPELINE_PHASES.FINISHED.value)
+def change_components_phase_to_created(pipeline_id:str,component_id:str):
+    '''将某个组件的状态改变至created
+    '''
+    db.update('.'.join(['kfp',pipeline_id.replace('_','.'),component_id,'phase']),global_config.Component_PHASES.CREATED.value)
+def change_components_phase_to_running(pipeline_id:str,component_id:str):
+    '''将某个组件的状态改变至running
+    '''
+    db.update('.'.join(['kfp',pipeline_id.replace('_','.'),component_id,'phase']),global_config.Component_PHASES.RUNNING.value)
+def change_components_phase_to_finished(pipeline_id:str,component_id:str):
+    '''将某个组件的状态改变至finished
+    '''
+    db.update('.'.join(['kfp',pipeline_id.replace('_','.'),component_id,'phase']),global_config.Component_PHASES.FINISHED.value)
+    

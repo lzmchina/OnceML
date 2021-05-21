@@ -52,3 +52,8 @@ def get_current_node_host():
         if value.type=='InternalIP':
             return value.address
     return None
+def get_current_node_name():
+    '''获取当前节点在局域网的host
+    '''
+    # 获取本机电脑名
+    return socket.getfqdn(socket.gethostname())

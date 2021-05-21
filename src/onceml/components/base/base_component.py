@@ -83,6 +83,11 @@ class BaseComponent(Jsonable):
         #当前节点的上游节点与下游节点
         self._upstreamComponents = set()
         self._downstreamComponents = set()
+        #cache机制，判断当前组件是否与之前的组件有所变动,默认改变了，需要删除之前的数据
+        self._changed=True
+    def pre_execute(self):
+        '''
+        '''
     def execute(self):
         """execute就是组件实际运行的逻辑
 
@@ -114,7 +119,11 @@ class BaseComponent(Jsonable):
         return self._upstreamComponents
     def add_upstream_Components(self,component):
         self._upstreamComponents.add(component)
-    
+    @property
+    def changed(self):
+        return self._changed
+    def setChanged(self,changed:bool):
+        self._changed=changed
     @property
     def downstreamComponents(self):
         return self._downstreamComponents
@@ -181,10 +190,8 @@ class BaseComponent(Jsonable):
     def to_json_dict(self):
         json_dict={}
         for k,v in self.__dict__.items():
-            if k=='_dependentComponent':
-                continue
-            if k=='_downstreamComponents':
-                json_dict[k]=[component.id for component in v ]
-            if k not in ['_downstreamComponents','_upstreamComponents']:
+            if k not in ['_downstreamComponents','_upstreamComponents','_dependentComponent']:
                 json_dict[k]=v
+            elif k in ['_downstreamComponents']:
+                json_dict[k]=[component.id for component in v ]
         return json_dict

@@ -6,6 +6,25 @@ import onceml.utils.json_utils as json_utils
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
 import onceml.types.channel as channel
 import onceml.types.artifact as artifact
+import json
+import onceml.global_config as global_config
+def  NFSContainerOp(pipeline_id:str):
+    '''运行NFS的容器
+    '''
+    print(kfp_config.NFS_POD_TEMPLATE)
+    nfsop=dsl.ResourceOp(
+        name='mount-nfs',
+        k8s_resource=json.loads(
+            kfp_config.NFS_POD_TEMPLATE.format(
+                NFS_NAME=global_config.project_name+'-'+pipeline_id,
+                labels={
+                    kfp_config.NFS_POD_LABEL_KEY:pipeline_id
+                }
+                )
+        ),
+        action='create'
+    )
+    return nfsop
 class KfpComponent:
     '''kubeflow workflow中的一个组件
 

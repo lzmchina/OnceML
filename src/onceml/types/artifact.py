@@ -26,4 +26,4 @@ class Artifact(json_utils.Jsonable):
             raise TypeError("Artifact设置的url应该是一个str类型的变量")
         self._url=url
     def to_json_dict(self):
-        return self.__dict__.items()
+        return self.__dict__

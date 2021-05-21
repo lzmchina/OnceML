@@ -232,6 +232,8 @@ class Pipeline():
                 component.deploytype='Do'
             else:
                 component.deploytype='Cycle'
+            #同时利用cache机制，判断是否可以利用之前的数据
+            pipeline_utils.compare_component(self._task_name,self._model_name,component)
     def db_store(self):
         '''将数据保存到db里
 
@@ -241,7 +243,21 @@ class Pipeline():
         for component in self.components:
             if not pipeline_utils.db_update_pipeline_component(task_name=self._task_name,model_name=self._model_name,component=component):
                 logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(self.id,component.id))
-                raise exception.DBOpTypeErrorS('数据库操作失败')
+                raise exception.DBOpTypeError('数据库操作失败')
         if not pipeline_utils.db_update_pipeline(self._task_name,self._model_name):
             logger.error('数据库更新pipeline id:{}失败'.format(self.id))
-            raise exception.DBOpTypeErrorS('数据库操作失败')
+            raise exception.DBOpTypeError('数据库操作失败')
+    def db_delete(self):
+        '''将db里的数据删除
+
+        先删除pipeline，再删除组件
+        因为是先查询pipeline，所以保存得反着来
+        '''
+        if not pipeline_utils.db_delete_pipeline(self._task_name,self._model_name):
+            logger.error('数据库删除pipeline id:{}失败'.format(self.id))
+            raise exception.DBOpTypeError('数据库操作失败')
+        for component in self.components:
+            if not pipeline_utils.db_delete_pipeline_component(task_name=self._task_name,model_name=self._model_name,component=component):
+                logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(self.id,component.id))
+                raise exception.DBOpTypeError('数据库操作失败')
+

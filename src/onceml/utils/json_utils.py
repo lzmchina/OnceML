@@ -95,7 +95,8 @@ class ComponentDecoder(json.JSONDecoder):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
     def object_hook(self, obj):
-
+        if '__object_type__'  not in obj:
+            return obj
         def _extract_class(d):
             module_name = d.pop("__module__")
             class_name = d.pop("__class__")
@@ -149,7 +150,7 @@ def simpleLoads(jsonstr: str):
 
 
 def simpleDumps(obj: object):
-    return json.dumps(obj)
+    return json.dumps(obj,sort_keys=True)
 
 
 def componentDumps(obj):
@@ -159,4 +160,4 @@ def componentDumps(obj):
 
 def componentLoads(s: str):
     """Loads a JSON into an object with Jsonable decoding."""
-    return json.loads(s, default=dict_to_obj)
+    return json.loads(s, cls=ComponentDecoder)
