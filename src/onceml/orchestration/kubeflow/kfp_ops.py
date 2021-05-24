@@ -10,10 +10,10 @@ from onceml.orchestration.pipeline import Pipeline
 import onceml.utils.k8s_ops as k8s_ops
 import onceml.utils.db as db
 import onceml.global_config as global_config
+import onceml.components.base.global_component as global_component
 def exist_experiment(client: kfp.Client, experiment_name: str):
     try:
         exp = client.get_experiment(experiment_name=experiment_name)
-        logger.logger.info(exp)
         return True
     except:
         return False
@@ -22,7 +22,6 @@ def exist_experiment(client: kfp.Client, experiment_name: str):
 def create_experiment(client: kfp.Client, experiment_name: str):
     try:
         exp = client.create_experiment(name=experiment_name)
-        logger.logger.info(exp)
         return True
     except:
         return False
@@ -48,7 +47,7 @@ def get_experiment_id(client: kfp.Client, experiment_name: str):
     '''
     try:
         exp = client.get_experiment(experiment_name=experiment_name)
-        logger.logger.debug(exp)
+        
         return exp.id
     except:  # not found
         logger.logger.error('没有找到experiment')
@@ -64,7 +63,7 @@ def exist_pipeline(client: kfp.Client, pipeline_name: str) -> list:
     run_list = client.list_runs(experiment_id=exp_id,page_size=kfp_config.RUNS_PAGE_SIZE).runs or []
     pipeline_list = []
     for run in run_list:
-        if '-'.join([kfp_config.PROJECTDIRNAME, pipeline_name]) in run.name:
+        if '-'.join([global_config.PROJECTDIRNAME, pipeline_name]) in run.name:
             pipeline_list.append(run.id)
     logger.logger.info('当前项目正在运行的实例:{}'.format(pipeline_list))
     return pipeline_list
@@ -87,7 +86,7 @@ def ensure_pipeline(client: kfp.Client, package_path: str, pipeline: Pipeline):
     # client.create_run_from_pipeline_package(pipeline_file=package_path,
     #                                         arguments={},
     #                                         run_name='-'.join(
-    #                                             [kfp_config.PROJECTDIRNAME, pipeline.id]),
+    #                                             [global_config.PROJECTDIRNAME, pipeline.id]),
     #                                         experiment_name=kfp_config.EXPERIMENT,
     #                                         )
     #
@@ -95,7 +94,7 @@ def ensure_pipeline(client: kfp.Client, package_path: str, pipeline: Pipeline):
 def ensure_pv(rootdir: str, nfc_host: str):
     '''创建供onceml使用的pv
     '''
-    pv_name = kfp_config.PVNAME_PRE+'-'+kfp_config.PROJECTDIRNAME
+    pv_name = kfp_config.PVNAME_PRE+'-'+global_config.PROJECTDIRNAME
     pv_info = k8s_ops.get_pv(pv=pv_name)
     nfc_host = nfc_host or k8s_ops.get_current_node_host()
     if nfc_host is None:
@@ -106,7 +105,7 @@ def ensure_pv(rootdir: str, nfc_host: str):
         # 说明集群里没有相应的pv
         logger.logger.warning('没有找到pv：{},现在开始创建'.format(pv_name))
         if not k8s_ops.create_nfs_pv(pvname=pv_name, nfsurl=nfsurl, labels={
-            kfp_config.PV_LABEL: kfp_config.PROJECTDIRNAME
+            kfp_config.PV_LABEL: global_config.PROJECTDIRNAME
         }):
             logger.logger.error('创建pv ：{}失败'.format(pv_name))
             raise RuntimeError
@@ -115,6 +114,16 @@ def ensure_pv(rootdir: str, nfc_host: str):
     else:
         # 找到了，需要检查是否跟工程的目录匹配
         logger.logger.warning('目前pv：{}的host与url与当前不符'.format(pv_name))
+def ensure_nfs_server(NFS_NAME:str,labels:dict):
+    '''创建项目的nfs server与svc，保证所有的task都能共享
+    '''
+    logger.logger.info("开始创建nfs server,挂载目录:{}".format(global_config.PROJECTDIR))
+    k8s_ops.apply_nfs_server(NFS_NAME,labels)
+def ensure_nfs_svc(NFS_SVC_NAME:str,selector:dict):
+    '''创建项目的nfs server与svc，保证所有的task都能共享
+    '''
+    logger.logger.info("开始创建nfs server svc:{}".format(NFS_SVC_NAME))
+    k8s_ops.apply_nfs_svc(NFS_SVC_NAME,selector)
 def change_pipeline_phase_to_created(pipeline_id:str):
     '''将pipeline的phase切换至created
     '''
@@ -139,4 +148,11 @@ def change_components_phase_to_finished(pipeline_id:str,component_id:str):
     '''将某个组件的状态改变至finished
     '''
     db.update('.'.join(['kfp',pipeline_id.replace('_','.'),component_id,'phase']),global_config.Component_PHASES.FINISHED.value)
-    
+def get_global_component_alias_component(task_name: str, model_name: str, component: global_component.GlobalComponent):
+    '''获得global_component的原始model、component
+    '''
+    alias_model = db.select(
+        '.'.join([task_name, model_name, component.id, 'alias_model']))
+    alias_component=db.select(
+        '.'.join([task_name, model_name, component.id, 'alias_component']))
+    return alias_model,alias_component

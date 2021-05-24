@@ -111,7 +111,7 @@ class Pipeline():
         if '/' in task_name or '/' in model_name:
             raise RuntimeError(
                 "pipeline的task name:%s 或者 model name:%s不能包含 '/'符号 " % (task_name, model_name))
-        self._rootdir = os.path.join(task_name, model_name)
+        self._rootdir = os.path.join(task_name.lower(), model_name.lower())
 
     @property
     def id(self) -> str:
@@ -126,7 +126,7 @@ class Pipeline():
         if '_' in task_name or '_' in model_name:
             raise RuntimeError(
                 "pipeline的task name:%s 或者 model name:%s不能包含 '_'符号 " % (task_name, model_name))
-        self._id = task_name+'_'+model_name
+        self._id = (str(task_name+'-'+model_name)).lower()
         self.rootdir = tuple_name
 
     @property
@@ -222,7 +222,10 @@ class Pipeline():
                 raise exception.ComponentNotFoundError()
             #然后再根据别名组件,得到他的deploytype
             component.deploytype=pipeline_utils.db_get_pipeline_component_deploytype(self._task_name,component.alias_model_name,component.alias_component_id)
-            
+            #更新一下alias的组件，可能存在较长alias链，这时需要找到最初的那个
+            origin_model,origin_component=pipeline_utils.get_global_component_alias_component(self._task_name,self._model_name,component)
+            component.alias_component_id=origin_component
+            component.alias_model_name=origin_model
 
         else:
             #说明是普通的组件，直接通过executor class的信息判断

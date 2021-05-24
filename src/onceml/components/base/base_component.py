@@ -180,9 +180,9 @@ class BaseComponent(Jsonable):
             raise TypeError('组件id必须是str类型')
         if _id =='' :#如果用户没有指定，就用类的名称做id
             #print('component id： ',self.__class__.__name__)
-            self._id = self.__class__.__name__
+            self._id = str(self.__class__.__name__).lower()
         else:
-            self._id=_id
+            self._id=_id.lower()
     @classmethod
     def get_class_type(cls) -> str:
         return '.'.join(

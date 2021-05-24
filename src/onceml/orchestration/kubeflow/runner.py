@@ -14,6 +14,7 @@ import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
 import onceml.utils.k8s_ops as k8s_ops
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
 import onceml.types.exception as exception
+import onceml.global_config as global_config
 
 
 class KubeflowRunner(BaseRunner):
@@ -81,21 +82,23 @@ class KubeflowRunner(BaseRunner):
         pipeline: The logical TFX pipeline to base the construction on.
         pipeline_root: dsl.PipelineParam representing the pipeline root."""
         component_to_kfp_op = {}
-        component_to_kfp_op['nfs']=Kfp_component.NFSContainerOp()
-        # for component in pipeline.components:
-        #     # ktp_component=
-        #     depends_on = {}
-        #     Do_deploytype = []
-        #     for upstreamComponent in component.upstreamComponents:
-        #         if upstreamComponent.deploytype == "Do":
-        #             Do_deploytype.append(upstreamComponent.id)
-        #         depends_on[upstreamComponent.id] = component_to_kfp_op[upstreamComponent.id]
-        #     kfp_component = Kfp_component.KfpComponent(
-        #         pipeline_root=pipeline.rootdir,
-        #         component=component,
-        #         depends_on=depends_on,
-        #         Do_deploytype=Do_deploytype)
-        #     component_to_kfp_op[component.id] = kfp_component.container_op
+        # component_to_kfp_op['nfs']=Kfp_component.NFSContainerOp(pipeline.id)
+        for component in pipeline.components:
+            # ktp_component=
+            depends_on = {}
+            Do_deploytype = []
+            for upstreamComponent in component.upstreamComponents:
+                if upstreamComponent.deploytype == "Do":
+                    Do_deploytype.append(upstreamComponent.id)
+                depends_on[upstreamComponent.id] = component_to_kfp_op[upstreamComponent.id]
+            kfp_component = Kfp_component.KfpComponent(
+                task_name=pipeline._task_name,
+                model_name=pipeline._model_name,
+                pipeline_root=pipeline.rootdir,
+                component=component,
+                depends_on=depends_on,
+                Do_deploytype=Do_deploytype)
+            component_to_kfp_op[component.id] = kfp_component.container_op
 
     def allocate_component_artifact_url(self, pipeline: Pipeline):
         '''给pipeline每个组件分配artifact的存储目录
@@ -125,6 +128,20 @@ class KubeflowRunner(BaseRunner):
         file_name = pipeline.id+'.yaml'
         # self._parse_parameter_from_pipeline(pipeline)
         self.allocate_component_artifact_url(pipeline=pipeline)
+        pipeline.db_store()
+        # 在kfp中创建本项目专属的nfs server与nfs svc
+        kfp_ops.ensure_nfs_server(
+            NFS_NAME=kfp_config.NFS_NAME,
+            labels={
+                kfp_config.NFS_POD_LABEL_KEY: global_config.PROJECTDIRNAME
+            }
+        )
+        kfp_ops.ensure_nfs_svc(
+            NFS_SVC_NAME=kfp_config.NFS_NAME,
+            selector={
+                kfp_config.NFS_POD_LABEL_KEY: global_config.PROJECTDIRNAME
+            }
+        )
         # 编译成workflow资源
         self._compiler._create_and_write_workflow(
             pipeline_func=lambda: self._construct_pipeline_graph(pipeline),
@@ -134,16 +151,18 @@ class KubeflowRunner(BaseRunner):
         )
         # 在kfp中创建onceml专属的experiment
         kfp_ops.ensure_experiment(self._kfp_client, kfp_config.EXPERIMENT)
+        
+
+        # 对数据库中的信息进行更新
+        self.db_store(pipeline)
         # 在kfp中创建运行相应的pipeline，并且将其归属于kfp_config.EXPERIMENT中
         kfp_ops.ensure_pipeline(self._kfp_client, os.path.join(
             self._output_dir, 'yamls', file_name), pipeline)
-        # 对数据库中的信息进行更新
-        self.db_store(pipeline)
-        pipeline.db_store()
 
-    def db_store(self,pipeline:Pipeline):
+    def db_store(self, pipeline: Pipeline):
         '''将kfp的信息存储
         '''
         kfp_ops.change_pipeline_phase_to_created(pipeline.id)
         for c in pipeline.components:
-            kfp_ops.change_components_phase_to_created(pipeline_id=pipeline.id,component_id=c.id)
+            kfp_ops.change_components_phase_to_created(
+                pipeline_id=pipeline.id, component_id=c.id)

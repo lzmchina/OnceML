@@ -16,6 +16,8 @@ def delete(key):
         del db_connector[key]
 
 def update(key,value):
+    if value is None:
+        return
     db_connector[key] = value
 
 def select(key):
