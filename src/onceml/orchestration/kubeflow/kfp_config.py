@@ -2,7 +2,7 @@
 import onceml.global_config as global_config
 import os
 # 包含镜像的一些信息
-IMAGE = 'liziming/{}:latest'.format(global_config.project_name)
+IMAGE = 'liziming/{}:0.0.1'.format(global_config.project_name)
 COMMAND = 'python3 -m {}.orchestration.kubeflow.container_entrypoint'.format(
     global_config.project_name)
 WORKINGDIR = '/project'  # 容器里代码工程被挂载的目录，会在这里面执行命令
@@ -12,6 +12,11 @@ SERVERPORT = 8080
 
 SVCNAME = 'ml-pipeline-ui'
 NAMESPACE = 'kubeflow'
+#workflow crd的信息
+wf_group='argoproj.io'
+wf_version='v1alpha1'
+wf_plural='workflows'
+
 # 如果不指定kfp的输出目录，则采用默认路径
 KFPOUTPUT = os.path.join(global_config.PROJECTDIR, OUTPUTSDIR)
 # pv pvc

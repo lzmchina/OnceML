@@ -158,7 +158,7 @@ class KfpComponent:
         for c_id, v in depends_on.items():
             if c_id in Do_deploytype:
                 self.container_op.after(v)
-        # 进行nfs的volume挂载色临风
+        # 进行nfs的volume挂载
         self.container_op.add_volume(k8s_ops.client.V1Volume(
             name='nfs-volume',
             nfs=k8s_ops.client.V1NFSVolumeSource(

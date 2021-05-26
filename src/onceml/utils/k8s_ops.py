@@ -1,3 +1,4 @@
+from collections import namedtuple
 from os import name
 from os.path import expanduser
 from kubernetes import client, config
@@ -7,8 +8,23 @@ import onceml.global_config as global_config
 import onceml.utils.logger as logger
 config.load_kube_config()
 _k8s_client = client.CoreV1Api()
-
-
+_crd_api=client.CustomObjectsApi()
+def get_crd_instance_list(namespace:str,group:str,label_selector:str, version:str, plural:str):
+    return _crd_api.list_namespaced_custom_object(
+        namespace=namespace,
+        group=group,
+        version=version,
+        plural=plural,
+        label_selector=label_selector
+    )
+def delete_crd_instance(namespace:str,group:str,name:str, version:str, plural:str):
+    _crd_api.delete_namespaced_custom_object(
+        group=group,
+        version=version,
+        namespace=namespace,
+        plural=plural,
+        name=name
+    )
 def get_kfp_host(svc: str, namespace: str):
     return _k8s_client.read_namespaced_service(name=svc, namespace=namespace).spec.cluster_ip
 
@@ -208,7 +224,7 @@ def apply_nfs_svc(NFS_SVC_NAME: str, selector: dict):
             name=NFS_SVC_NAME,
             namespace=kfp_config.NAMESPACE
         )
-        logger.logger.warning('SVC {}已经存在,无需创建'.format(NFS_SVC_NAME))
+        logger.logger.info('SVC {}已经存在,无需创建'.format(NFS_SVC_NAME))
     except:
         logger.logger.warning('SVC {}不存在,下面进行新建'.format(NFS_SVC_NAME))
         _k8s_client.create_namespaced_service(
