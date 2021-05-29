@@ -1,12 +1,16 @@
-from collections import namedtuple
-from os import name
-from os.path import expanduser
+import os
 from kubernetes import client, config
 import socket
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
 import onceml.global_config as global_config
 import onceml.utils.logger as logger
-config.load_kube_config()
+if os.getenv('{}ENV'.format(global_config.project_name)) =='INPOD':
+    config.load_incluster_config()#在pod里面
+else:#在集群外
+    try:
+        config.load_kube_config()
+    except:
+        logger.logger.warning('没有找到kubeconfig文件，有关k8s的api无法使用')
 _k8s_client = client.CoreV1Api()
 _crd_api=client.CustomObjectsApi()
 def get_crd_instance_list(namespace:str,group:str,label_selector:str, version:str, plural:str):

@@ -74,8 +74,8 @@ class Pipeline():
         for key, v in components.items():
             v.id = key
         
-        self._task_name = task_name
-        self._model_name = model_name
+        self._task_name = task_name.lower()
+        self._model_name = model_name.lower()
         self.id = (task_name, model_name)
         self.components = components.values() or []
         # 依赖的模型
@@ -180,9 +180,9 @@ class Pipeline():
         所以这里进行一个判断
         '''
         for index, layer in enumerate(self._layersComponents):
-            print('第 %d 层' % index)
+            logger.info('第 %d 层' % index)
             for component in layer:
-                print('component id %s' % component.id)
+                logger.info('component id %s' % component.id)
                 #对component的deploytype继续填充，因为组件没有这一步骤，GlobalComponent类型的组件需要找到他的别名组件
                 self.fill_c_deploytype_field(component)
 
@@ -200,7 +200,7 @@ class Pipeline():
     def _testrun(self):
         for c in self._components:
             c.execute()
-            print('dependency:', c.upstreamComponents, c.downstreamComponents)
+            logger.info('dependency:', c.upstreamComponents, c.downstreamComponents)
     def custom_static_check(self):
         '''在deploy开始前检查pipeline,通常为组件的自检
         '''

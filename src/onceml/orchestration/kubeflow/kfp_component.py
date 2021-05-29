@@ -73,8 +73,8 @@ class KfpComponent:
 
         """
         arguments = [
-            '--component_id',
-            component.id,
+            '--pipeline_root',
+            [task_name,model_name],
             '--serialized_component',
             json_utils.componentDumps(component)
         ]
@@ -93,14 +93,14 @@ class KfpComponent:
         if component.deploytype == 'Do':
 
             self.container_op = dsl.ContainerOp(
-                name=component.id.replace('.', '_'),
+                name=component.id,
                 command=kfp_config.COMMAND,
                 image=kfp_config.IMAGE,
                 arguments=arguments,
                 file_outputs={  # 存放组件的channels结果的文件，方便ui可视化
-                    'mlpipeline-ui-metadata': os.path.join(component.artifact.url, 'result.json'),
-                    'channels': os.path.join(component.artifact.url, 'result.json'),
-                    'artifact': os.path.join(component.artifact.url, 'artifact')
+                    'mlpipeline-ui-metadata': os.path.join(kfp_config.WORKINGDIR,kfp_config.OUTPUTSDIR,component.artifact.url, 'result.json'),
+                    'channels': os.path.join(kfp_config.WORKINGDIR,kfp_config.OUTPUTSDIR,component.artifact.url, 'result.json'),
+                    'artifact': os.path.join(kfp_config.WORKINGDIR,kfp_config.OUTPUTSDIR,component.artifact.url, 'artifact')
                 },
                 container_kwargs={
                     'working_dir': kfp_config.WORKINGDIR,
@@ -114,14 +114,14 @@ class KfpComponent:
 
         else:
             self.container_op = dsl.ContainerOp(
-                name=component.id.replace('.', '_'),
+                name=component.id,
                 command=kfp_config.COMMAND,
                 image=kfp_config.IMAGE,
                 arguments=arguments,
                 file_outputs={  # 存放组件的channels结果的文件，方便ui可视化
-                    'mlpipeline-ui-metadata': os.path.join(component.artifact.url, 'result.json'),
-                    'channels': os.path.join(component.artifact.url, 'result.json'),
-                    'artifact': os.path.join(component.artifact.url, 'artifact')
+                    'mlpipeline-ui-metadata': os.path.join(kfp_config.WORKINGDIR,kfp_config.OUTPUTSDIR,component.artifact.url, 'result.json'),
+                    'channels': os.path.join(kfp_config.WORKINGDIR,kfp_config.OUTPUTSDIR,component.artifact.url, 'result.json'),
+                    'artifact': os.path.join(kfp_config.WORKINGDIR,kfp_config.OUTPUTSDIR,component.artifact.url, 'artifact')
                 },
                 container_kwargs={
                     'working_dir': kfp_config.WORKINGDIR,

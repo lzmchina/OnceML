@@ -11,7 +11,7 @@ import onceml.utils.k8s_ops as k8s_ops
 import onceml.utils.db as db
 import onceml.global_config as global_config
 import onceml.components.base.global_component as global_component
-
+import onceml.types.phases as phases
 
 def exist_experiment(client: kfp.Client, experiment_name: str):
     try:
@@ -155,42 +155,42 @@ def change_pipeline_phase_to_created(pipeline_id: str):
     '''将pipeline的phase切换至created
     '''
     db.update('.'.join(['kfp', pipeline_id.replace('_', '.'), 'phase']),
-              global_config.PIPELINE_PHASES.CREATED.value)
+              phases.PIPELINE_PHASES.CREATED.value)
 
 
 def change_pipeline_phase_to_running(pipeline_id: str):
     '''将pipeline的phase切换至running
     '''
     db.update('.'.join(['kfp', pipeline_id.replace('_', '.'), 'phase']),
-              global_config.PIPELINE_PHASES.RUNNING.value)
+              phases.PIPELINE_PHASES.RUNNING.value)
 
 
 def change_pipeline_phase_to_finished(pipeline_id: str):
     '''将pipeline的phase切换至finished
     '''
     db.update('.'.join(['kfp', pipeline_id.replace('_', '.'), 'phase']),
-              global_config.PIPELINE_PHASES.FINISHED.value)
+              phases.PIPELINE_PHASES.FINISHED.value)
 
 
 def change_components_phase_to_created(pipeline_id: str, component_id: str):
     '''将某个组件的状态改变至created
     '''
     db.update('.'.join(['kfp', pipeline_id.replace('_', '.'), component_id,
-              'phase']), global_config.Component_PHASES.CREATED.value)
+              'phase']), phases.Component_PHASES.CREATED.value)
 
 
 def change_components_phase_to_running(pipeline_id: str, component_id: str):
     '''将某个组件的状态改变至running
     '''
     db.update('.'.join(['kfp', pipeline_id.replace('_', '.'), component_id,
-              'phase']), global_config.Component_PHASES.RUNNING.value)
+              'phase']), phases.Component_PHASES.RUNNING.value)
 
 
 def change_components_phase_to_finished(pipeline_id: str, component_id: str):
     '''将某个组件的状态改变至finished
     '''
     db.update('.'.join(['kfp', pipeline_id.replace('_', '.'), component_id,
-              'phase']), global_config.Component_PHASES.FINISHED.value)
+              'phase']), phases.Component_PHASES.FINISHED.value)
 
 
 def get_global_component_alias_component(task_name: str, model_name: str, component: global_component.GlobalComponent):

@@ -82,7 +82,6 @@ def compare_component(task_name, model_name, component: base_component.BaseCompo
     '''检查组件是否与之前的状态有改变
     '''
     _before = db.select('.'.join([task_name, model_name, component.id]))
-    print(_before)
     if _before is None:  # 说明之前没有运行过
         component.setChanged(True)
     else:

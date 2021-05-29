@@ -14,6 +14,10 @@ from typing import List, Optional
 from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
+from enum import Enum
+class BaseComponentDeployType(Enum):
+    DO='Do'
+    CYCLE='Cycle'
 class BaseComponent(Jsonable):
     """BaseComponent是最基本的组件
 
@@ -22,7 +26,7 @@ class BaseComponent(Jsonable):
     总结一下：Channel、Artifact是在运行过程中产生的数据结构；param是在运行前设置好的参数；组件的inputs是依赖的组件，outputs是返回组件的channel、artifact
     """
 
-    def __init__(self, executor: BaseExecutor.__class__, inputs: Optional[List] = None, instance_name: str = None,shared:bool=False, **args):
+    def __init__(self, executor: BaseExecutor.__class__, inputs: Optional[List] = None,shared:bool=False, **args):
         """
         description
         ---------
@@ -48,7 +52,7 @@ class BaseComponent(Jsonable):
         -------
         TypeError:没有按照给定的参数类型来构造
         """
-        self.id = instance_name or ''
+        
         if not issubclass(executor, BaseExecutor):
             raise TypeError('传入的executor不是BaseExecutor class')
 
@@ -165,7 +169,7 @@ class BaseComponent(Jsonable):
         return self._deploytype
     @deploytype.setter
     def deploytype(self,d_type):
-        if d_type not in ['Do','Cycle']:
+        if d_type not in BaseComponentDeployType._value2member_map_:
             raise exception.DeployTypeError('DeployType只能是Do或者Cycle')
         self._deploytype=d_type
     @property
