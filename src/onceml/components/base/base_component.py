@@ -9,15 +9,19 @@
 @version	:0.0.1
 '''
 from onceml.types.artifact import Artifact
-from onceml.types.channel import  Channels, OutputChannel
+from onceml.types.channel import Channels, OutputChannel
 from typing import List, Optional
 from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
 from enum import Enum
+
+
 class BaseComponentDeployType(Enum):
-    DO='Do'
-    CYCLE='Cycle'
+    DO = 'Do'
+    CYCLE = 'Cycle'
+
+
 class BaseComponent(Jsonable):
     """BaseComponent是最基本的组件
 
@@ -25,8 +29,11 @@ class BaseComponent(Jsonable):
 
     总结一下：Channel、Artifact是在运行过程中产生的数据结构；param是在运行前设置好的参数；组件的inputs是依赖的组件，outputs是返回组件的channel、artifact
     """
-
-    def __init__(self, executor: BaseExecutor.__class__, inputs: Optional[List] = None,shared:bool=False, **args):
+    def __init__(self,
+                 executor: BaseExecutor.__class__,
+                 inputs: Optional[List] = None,
+                 shared: bool = False,
+                 **args):
         """
         description
         ---------
@@ -52,7 +59,7 @@ class BaseComponent(Jsonable):
         -------
         TypeError:没有按照给定的参数类型来构造
         """
-        
+
         if not issubclass(executor, BaseExecutor):
             raise TypeError('传入的executor不是BaseExecutor class')
 
@@ -74,13 +81,13 @@ class BaseComponent(Jsonable):
         # 组件状态
         self._state = []
         #组件是否会共享
-        self._datashared=shared
+        self._datashared = shared
         # 找到依赖的组件后，就该将他们的channel、artifact加入进来，这个具体的由pipeline操作
         self._dependentChannels = {}
         self._dependentArtifacts = {}
         # 拿到executor class
         self._executor_cls = executor
-        self._deploytype=None
+        self._deploytype = None
         #检查executor class是否只重写了一个函数
         # if (bool(self._executor_cls.Do==BaseExecutor.Do)==bool(self._executor_cls.Cycle==BaseExecutor.Cycle)):
         #     raise  SyntaxError('Do与Cycle必须有且只能有一个被重写')
@@ -88,10 +95,12 @@ class BaseComponent(Jsonable):
         self._upstreamComponents = set()
         self._downstreamComponents = set()
         #cache机制，判断当前组件是否与之前的组件有所变动,默认改变了，需要删除之前的数据
-        self._changed=True
+        self._changed = True
+
     def pre_execute(self):
         '''
         '''
+
     def execute(self):
         """execute就是组件实际运行的逻辑
 
@@ -102,12 +111,15 @@ class BaseComponent(Jsonable):
         self._executor = self._executor_cls()
         if self._executor is None:
             raise Exception('executor未定义')
-        if self._executor._type=='Do':
-            self._executor.Do(self._params, input_channels=self._dependentChannels,
-                          input_artifacts=self._dependentArtifacts)
-        elif self._executor._type=='Cycle':
-            self._executor.Cycle(self._params, input_channels=self._dependentChannels,
-                          input_artifacts=self._dependentArtifacts)
+        if self._executor._type == 'Do':
+            self._executor.Do(self._params,
+                              input_channels=self._dependentChannels,
+                              input_artifacts=self._dependentArtifacts)
+        elif self._executor._type == 'Cycle':
+            self._executor.Cycle(self._params,
+                                 input_channels=self._dependentChannels,
+                                 input_artifacts=self._dependentArtifacts)
+
     @property
     def inputs(self):
         return self._dependentComponent
@@ -115,25 +127,32 @@ class BaseComponent(Jsonable):
     @property
     def outputs(self):
         return self._channel
+
     @property
     def dependentComponent(self):
         return self._dependentComponent
+
     @property
     def upstreamComponents(self):
         return self._upstreamComponents
-    def add_upstream_Components(self,component):
+
+    def add_upstream_Components(self, component):
         self._upstreamComponents.add(component)
+
     @property
     def changed(self):
         return self._changed
-    def setChanged(self,changed:bool):
-        self._changed=changed
+
+    def setChanged(self, changed: bool):
+        self._changed = changed
+
     @property
     def downstreamComponents(self):
         return self._downstreamComponents
-    def add_downstream_Components(self,component):
+
+    def add_downstream_Components(self, component):
         self._downstreamComponents.add(component)
-    
+
     @property
     def artifact(self):
         """组件产生的数据文件的存放地方
@@ -149,11 +168,13 @@ class BaseComponent(Jsonable):
         可以由组件的构造函数的instance_name指定，或者由系统分配，组件的id在pipeline里唯一
         """
         return self._id
+
     @property
     def type(self) -> str:
         '''该实例归属于哪个class，包名+class名
         '''
         return self.__class__.get_class_type()
+
     @property
     def deploytype(self) -> str:
         '''该实例是一次执行还是循环执行
@@ -167,35 +188,42 @@ class BaseComponent(Jsonable):
         # else:
         #     return 'Cycle'
         return self._deploytype
+
     @deploytype.setter
-    def deploytype(self,d_type):
+    def deploytype(self, d_type):
         if d_type not in BaseComponentDeployType._value2member_map_:
             raise exception.DeployTypeError('DeployType只能是Do或者Cycle')
-        self._deploytype=d_type
+        self._deploytype = d_type
+
     @property
-    def datashared(self)->bool:
+    def datashared(self) -> bool:
         '''组件的数据是否会共享出来
         '''
         return self._datashared
+
     @id.setter
     def id(self, _id: str):
         _id = _id or ''
         if not isinstance(_id, str):
             raise TypeError('组件id必须是str类型')
-        if _id =='' :#如果用户没有指定，就用类的名称做id
+        if _id == '':  #如果用户没有指定，就用类的名称做id
             #print('component id： ',self.__class__.__name__)
             self._id = str(self.__class__.__name__).lower()
         else:
-            self._id=_id.lower()
+            self._id = _id.lower()
+
     @classmethod
     def get_class_type(cls) -> str:
-        return '.'.join(
-        [cls.__module__, cls.__name__])
+        return '.'.join([cls.__module__, cls.__name__])
+
     def to_json_dict(self):
-        json_dict={}
-        for k,v in self.__dict__.items():
-            if k not in ['_downstreamComponents','_upstreamComponents','_dependentComponent']:
-                json_dict[k]=v
+        json_dict = {}
+        for k, v in self.__dict__.items():
+            if k not in [
+                    '_downstreamComponents', '_upstreamComponents',
+                    '_dependentComponent'
+            ]:
+                json_dict[k] = v
             elif k in ['_downstreamComponents']:
-                json_dict[k]=[component.id for component in v ]
+                json_dict[k] = [component.id for component in v]
         return json_dict

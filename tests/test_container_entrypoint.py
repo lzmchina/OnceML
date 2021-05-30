@@ -41,7 +41,6 @@ def test_container_entrypoint():
                 s+=  "'"+i +"'"
             else:
                 s+= "'"+json_utils.simpleDumps(i)+"'"
-        print(' '.join(command)+s)
         os.system(' '.join(command)+s)
 if __name__ == "__main__":
     test_container_entrypoint()

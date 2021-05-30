@@ -13,7 +13,10 @@ import onceml.components.base as base
 
 
 class GlobalComponent(base.BaseComponent):
-    def __init__(self, alias_model_name: str, alias_component_id: str, inputs: Optional[List] = None):
+    def __init__(self,
+                 alias_model_name: str,
+                 alias_component_id: str,
+                 inputs: Optional[List] = None):
         """获取全局共享组件
         description
         ---------
@@ -33,7 +36,9 @@ class GlobalComponent(base.BaseComponent):
         """
         self._alias_model_name = alias_model_name
         self._alias_component_id = alias_component_id
-        super().__init__(executor=base.BaseExecutor, inputs=inputs, shared=True)
+        super().__init__(executor=base.BaseExecutor,
+                         inputs=inputs,
+                         shared=True)
 
     @property
     def alias_model_name(self):
@@ -46,7 +51,7 @@ class GlobalComponent(base.BaseComponent):
     @property
     def alias_component_id(self):
         return self._alias_component_id
-    @alias_component_id.setter
-    def alias_component_id(self,component:str):
-        self._alias_component_id=component
 
+    @alias_component_id.setter
+    def alias_component_id(self, component: str):
+        self._alias_component_id = component

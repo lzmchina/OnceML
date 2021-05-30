@@ -1,4 +1,6 @@
 import abc
+
+
 class BaseRunner(abc.ABC):
     '''基础的runner
 
@@ -6,8 +8,9 @@ class BaseRunner(abc.ABC):
     '''
     def __init__(self):
         pass
+
     @abc.abstractmethod
-    def deploy(self,pipeline):
+    def deploy(self, pipeline):
         """将一个pipeline部署在某个编排框架里
         """
         pass

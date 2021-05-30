@@ -10,7 +10,9 @@
 '''
 from onceml.types.channel import Channels
 from onceml.types.artifact import Artifact
-from typing import List,Dict,Optional
+from typing import List, Dict, Optional
+
+
 #from abc import abstractmethod
 class BaseExecutor:
     """BaseExecutor,组件实际执行的逻辑
@@ -18,15 +20,20 @@ class BaseExecutor:
     BaseExecutor接收到组件的params、Channels、Artifact，以及依赖组件的Channels、Artifact
 
     """
-    def __init__(self,deploytype:str):
-            self._type=deploytype
-        #print(self._type)
+    def __init__(self, deploytype: str):
+        self._type = deploytype
+    #print(self._type)
+
     # def __new__(cls):
 
     #     if (bool(cls.Do==BaseExecutor.Do)==bool(cls.Cycle==BaseExecutor.Cycle)):
-    #         raise  SyntaxError('Do与Cycle必须有且只能有一个被重写') 
+    #         raise  SyntaxError('Do与Cycle必须有且只能有一个被重写')
     #     return super().__new__(cls)
-    def Do(self,params:dict,input_channels:Optional[Dict[str,Channels]]=None,input_artifacts:Optional[Dict[str,Artifact]]=None)->Channels:
+
+    def Do(self,
+           params: dict,
+           input_channels: Optional[Dict[str, Channels]] = None,
+           input_artifacts: Optional[Dict[str, Artifact]] = None) -> Channels:
         """
         description
         ---------
@@ -48,9 +55,14 @@ class BaseExecutor:
         -------
         
         """
-        
+
         pass
-    def Cycle(self,params:dict,input_channels:Optional[Dict[str,Channels]]=None,input_artifacts:Optional[Dict[str,Artifact]]=None)->Channels:
+
+    def Cycle(
+            self,
+            params: dict,
+            input_channels: Optional[Dict[str, Channels]] = None,
+            input_artifacts: Optional[Dict[str, Artifact]] = None) -> Channels:
         """
         description
         ---------
@@ -72,8 +84,9 @@ class BaseExecutor:
         -------
         
         """
-        
+
         pass
+
     @property
     def type(self):
         return self._type

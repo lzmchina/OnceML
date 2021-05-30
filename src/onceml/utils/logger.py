@@ -12,6 +12,6 @@ __handler = logging.StreamHandler()
 #                                 datefmt='%Y-%m-%d %H:%M:%S'
 #                                 )
 LOGFORMAT = "%(log_color)s %(levelname)8s : %(name)8s : %(asctime)s : %(created).0f : %(message)s %(reset)s"
-formatter = ColoredFormatter(fmt=LOGFORMAT,datefmt='%Y-%m-%d %H:%M:%S')
+formatter = ColoredFormatter(fmt=LOGFORMAT, datefmt='%Y-%m-%d %H:%M:%S')
 __handler.setFormatter(formatter)
 logger.addHandler(__handler)

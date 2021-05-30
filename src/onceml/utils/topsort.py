@@ -1,10 +1,8 @@
 class InvalidDAGError(Exception):
     """Error to indicate invalid DAG."""
-def topsorted_layers(
-    nodes, 
-    get_node_id_fn,
-    get_parent_nodes,
-    get_child_nodes):
+
+
+def topsorted_layers(nodes, get_node_id_fn, get_parent_nodes, get_child_nodes):
     """Sorts the DAG of nodes in topological order.
     Args:
     nodes: A sequence of nodes.
@@ -34,9 +32,9 @@ def topsorted_layers(
         for node in layer:
             visited.add(get_node_id_fn(node))
             for child_node in get_child_nodes(node):
-            # Include the child node if all its parents are visited. If the child
-            # node is part of a cycle, it will never be included since it will have
-            # at least one unvisited parent node which is also part of the cycle.
+                # Include the child node if all its parents are visited. If the child
+                # node is part of a cycle, it will never be included since it will have
+                # at least one unvisited parent node which is also part of the cycle.
                 parent_node_ids = set(
                     get_node_id_fn(p) for p in get_parent_nodes(child_node))
                 if parent_node_ids.issubset(visited):

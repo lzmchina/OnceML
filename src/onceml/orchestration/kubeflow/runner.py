@@ -1,6 +1,5 @@
 from typing import List
 import kfp
-from kubernetes.config import kube_config
 from onceml.orchestration.runner import BaseRunner
 from onceml.orchestration import Pipeline
 from onceml.components import BaseComponent, GlobalComponent
@@ -9,6 +8,7 @@ from kfp import dsl
 import os
 from onceml.utils import logger
 import onceml.utils.json_utils as json_utils
+import onceml.utils.pipeline_utils as pipeline_utils
 import onceml.orchestration.kubeflow.kfp_component as Kfp_component
 import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
 import onceml.utils.k8s_ops as k8s_ops
@@ -18,7 +18,10 @@ import onceml.global_config as global_config
 
 
 class KubeflowRunner(BaseRunner):
-    def __init__(self, output_dir: str = None, kfp_host: str = None, nfc_host: str = None):
+    def __init__(self,
+                 output_dir: str = None,
+                 kfp_host: str = None,
+                 nfc_host: str = None):
         """负责将一个pipeline转换成kubeflow workflow资源
         description
         ---------
@@ -74,7 +77,8 @@ class KubeflowRunner(BaseRunner):
         self._parameters[component.id] = serialized_component
         # print(self._parameters)
         for key, value in self._parameters.items():
-            self.kfp_parameters.append(dsl.PipelineParam(name=key, value=value))
+            self.kfp_parameters.append(dsl.PipelineParam(name=key,
+                                                         value=value))
 
     def _construct_pipeline_graph(self, pipeline: Pipeline):
         """Constructs a Kubeflow Pipeline graph.
@@ -90,7 +94,8 @@ class KubeflowRunner(BaseRunner):
             for upstreamComponent in component.upstreamComponents:
                 if upstreamComponent.deploytype == "Do":
                     Do_deploytype.append(upstreamComponent.id)
-                depends_on[upstreamComponent.id] = component_to_kfp_op[upstreamComponent.id]
+                depends_on[upstreamComponent.id] = component_to_kfp_op[
+                    upstreamComponent.id]
             kfp_component = Kfp_component.KfpComponent(
                 task_name=pipeline._task_name,
                 model_name=pipeline._model_name,
@@ -106,17 +111,27 @@ class KubeflowRunner(BaseRunner):
         for c in pipeline.components:
             if type(c) == GlobalComponent:
                 # 如果是共享组件，则会建立软链接目录
-                if not os.path.exists(os.path.join(self._output_dir, pipeline._task_name, c._alias_model_name, c._alias_component_id)):
+                if not os.path.exists(
+                        os.path.join(self._output_dir, pipeline._task_name,
+                                     c._alias_model_name,
+                                     c._alias_component_id)):
                     logger.logger.error('全局组件{}的目录不存在'.format(c.id))
                     raise exception.FileNotFoundError()
-                os.symlink(src=os.path.join(os.getcwd(), self._output_dir, pipeline._task_name, c._alias_model_name,
-                           c._alias_component_id), dst=os.path.join(os.getcwd(), self._output_dir, pipeline.rootdir, c.id))
+                os.symlink(src=os.path.join(os.getcwd(), self._output_dir,
+                                            pipeline._task_name,
+                                            c._alias_model_name,
+                                            c._alias_component_id),
+                           dst=os.path.join(os.getcwd(), self._output_dir,
+                                            pipeline.rootdir, c.id))
                 c.artifact.setUrl(os.path.join(pipeline.rootdir, c.id))
             else:
-                if not os.path.exists(os.path.join(self._output_dir, pipeline.rootdir, c.id)):
+                if not os.path.exists(
+                        os.path.join(self._output_dir, pipeline.rootdir,
+                                     c.id)):
                     logger.logger.warning('组件{}的目录不存在,现在创建'.format(c.id))
                     os.makedirs(os.path.join(self._output_dir,
-                                pipeline.rootdir, c.id), exist_ok=True)
+                                             pipeline.rootdir, c.id),
+                                exist_ok=True)
                 c.artifact.setUrl(os.path.join(pipeline.rootdir, c.id))
 
     def deploy(self, pipeline: Pipeline):
@@ -125,44 +140,40 @@ class KubeflowRunner(BaseRunner):
         '''
         output_path = os.path.join(self._output_dir, pipeline.rootdir)
         os.makedirs(output_path, exist_ok=True)
-        file_name = pipeline.id+'.yaml'
+        file_name = pipeline.id + '.yaml'
         # self._parse_parameter_from_pipeline(pipeline)
         self.allocate_component_artifact_url(pipeline=pipeline)
         pipeline.db_store()
         # 在kfp中创建本项目专属的nfs server与nfs svc
-        kfp_ops.ensure_nfs_server(
-            NFS_NAME=kfp_config.NFS_NAME,
-            labels={
-                kfp_config.NFS_POD_LABEL_KEY: global_config.PROJECTDIRNAME
-            }
-        )
-        kfp_ops.ensure_nfs_svc(
-            NFS_SVC_NAME=kfp_config.NFS_NAME,
-            selector={
-                kfp_config.NFS_POD_LABEL_KEY: global_config.PROJECTDIRNAME
-            }
-        )
+        kfp_ops.ensure_nfs_server(NFS_NAME=kfp_config.NFS_NAME,
+                                  labels={
+                                      kfp_config.NFS_POD_LABEL_KEY:
+                                      global_config.PROJECTDIRNAME
+                                  })
+        kfp_ops.ensure_nfs_svc(NFS_SVC_NAME=kfp_config.NFS_NAME,
+                               selector={
+                                   kfp_config.NFS_POD_LABEL_KEY:
+                                   global_config.PROJECTDIRNAME
+                               })
         # 编译成workflow资源
         self._compiler._create_and_write_workflow(
             pipeline_func=lambda: self._construct_pipeline_graph(pipeline),
             pipeline_name=pipeline.id,
             # params_list=self.kfp_parameters,
-            package_path=os.path.join(self._output_dir, 'yamls', file_name)
-        )
+            package_path=os.path.join(self._output_dir, 'yamls', file_name))
         # 在kfp中创建onceml专属的experiment
         kfp_ops.ensure_experiment(self._kfp_client, kfp_config.EXPERIMENT)
-        
-
         # 对数据库中的信息进行更新
         self.db_store(pipeline)
         # 在kfp中创建运行相应的pipeline，并且将其归属于kfp_config.EXPERIMENT中
-        kfp_ops.ensure_pipeline(self._kfp_client, os.path.join(
-            self._output_dir, 'yamls', file_name), pipeline)
+        kfp_ops.ensure_pipeline(
+            self._kfp_client, os.path.join(self._output_dir, 'yamls',
+                                           file_name), pipeline)
 
     def db_store(self, pipeline: Pipeline):
         '''将kfp的信息存储
         '''
-        kfp_ops.change_pipeline_phase_to_created(pipeline.id)
+        pipeline_utils.change_pipeline_phase_to_created(pipeline.id)
         for c in pipeline.components:
-            kfp_ops.change_components_phase_to_created(
+            pipeline_utils.change_components_phase_to_created(
                 pipeline_id=pipeline.id, component_id=c.id)

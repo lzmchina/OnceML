@@ -14,7 +14,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from os.path import expanduser
 from typing import List, Optional, Text, Dict
-from onceml.components import BaseComponent,BaseExecutor
+from onceml.components import BaseComponent, BaseExecutor
 from onceml.utils.topsort import topsorted_layers
 import os
 import onceml.types.exception as exception
@@ -22,6 +22,9 @@ import onceml.utils.pipeline_utils as pipeline_utils
 from onceml.utils.json_utils import Jsonable
 from onceml.components.base.global_component import GlobalComponent
 from onceml.utils.logger import logger
+import onceml.global_config as global_config
+
+
 # class PipelineParam(Jsonable):
 #     def
 #     def to_json_dict(self):
@@ -35,8 +38,8 @@ class Pipeline():
 
     而且一个pipeline要做到模型分离，对于同一个场景，使用的数据相同，而模型不同，所以需要做到模型的训练分离
     '''
-
-    def __init__(self, task_name: str, model_name: str, components: Optional[Dict[str, BaseComponent]]):
+    def __init__(self, task_name: str, model_name: str,
+                 components: Optional[Dict[str, BaseComponent]]):
         """
         description
         ---------
@@ -73,11 +76,12 @@ class Pipeline():
         # _components为components经过拓扑结构处理后的结果，DAG(有向无环图)
         for key, v in components.items():
             v.id = key
-        
+
         self._task_name = task_name.lower()
         self._model_name = model_name.lower()
         self.id = (task_name, model_name)
         self.components = components.values() or []
+        self.allocate_component_artifact_url
         # 依赖的模型
         #self._depend_models = []
         #self.depend_models = depend_models
@@ -110,7 +114,8 @@ class Pipeline():
         task_name, model_name = tuple_name[0], tuple_name[1]
         if '/' in task_name or '/' in model_name:
             raise RuntimeError(
-                "pipeline的task name:%s 或者 model name:%s不能包含 '/'符号 " % (task_name, model_name))
+                "pipeline的task name:%s 或者 model name:%s不能包含 '/'符号 " %
+                (task_name, model_name))
         self._rootdir = os.path.join(task_name.lower(), model_name.lower())
 
     @property
@@ -122,15 +127,18 @@ class Pipeline():
     def id(self, tuple_name: tuple):
         '''pipeline的唯一id，{task name}_{model name}
         '''
+        chars = set('-_/')
         task_name, model_name = tuple_name[0], tuple_name[1]
-        if '_' in task_name or '_' in model_name:
+        if any((c in chars) for c in task_name) or any(
+            (c in chars) for c in model_name):
             raise RuntimeError(
-                "pipeline的task name:%s 或者 model name:%s不能包含 '_'符号 " % (task_name, model_name))
-        self._id = (str(task_name+'-'+model_name)).lower()
+                "pipeline的task name:%s 或者 model name:%s不能包含 '{}'符号 " %
+                (task_name, model_name, chars))
+        self._id = (str(task_name + '.' + model_name)).lower()
         self.rootdir = tuple_name
 
     @property
-    def components(self)->List[BaseComponent]:
+    def components(self) -> List[BaseComponent]:
         """pipeline的组件
 
         这些组件按照设置的逻辑拓扑排列
@@ -168,11 +176,8 @@ class Pipeline():
             list(deduped_components),
             get_node_id_fn=lambda c: c.id,
             get_parent_nodes=lambda c: c.upstreamComponents,
-            get_child_nodes=lambda c: c.downstreamComponents
-        )
+            get_child_nodes=lambda c: c.downstreamComponents)
         self._components = []
-        
-
         '''对component的deploytype进行检测，        
         Do:一次执行结束,后续组件可以是Cycle，也可以是Do
         Cycle：循环执行，后续组件只能是Cycle，因为需要靠发送http请求来驱动后续的组件执行一次
@@ -187,8 +192,9 @@ class Pipeline():
                 self.fill_c_deploytype_field(component)
 
                 if component.deploytype is None:
-                    raise exception.DeployTypeError('component {}必须有一种deploytype'.format(component.id))
-                
+                    raise exception.DeployTypeError(
+                        'component {}必须有一种deploytype'.format(component.id))
+
                 # 如果是Cycle类型的组件，就要检查他的直接后继节点是否是Cycle
                 if component.deploytype == 'Cycle':
                     for downc in component.downstreamComponents:
@@ -200,43 +206,91 @@ class Pipeline():
     def _testrun(self):
         for c in self._components:
             c.execute()
-            logger.info('dependency:', c.upstreamComponents, c.downstreamComponents)
+            logger.info('dependency:', c.upstreamComponents,
+                        c.downstreamComponents)
+
     def custom_static_check(self):
         '''在deploy开始前检查pipeline,通常为组件的自检
         '''
         pass
-    def fill_c_deploytype_field(self,component:BaseComponent):
-        if type(component)==GlobalComponent:
-            logger.info('pipeline: {} 的component :{}为全局组件，别名{}中{}组件'.format(self.id,component.id,component.alias_model_name,component.alias_component_id))
+
+    def fill_c_deploytype_field(self, component: BaseComponent):
+        if type(component) == GlobalComponent:
+            logger.info('pipeline: {} 的component :{}为全局组件，别名{}中{}组件'.format(
+                self.id, component.id, component.alias_model_name,
+                component.alias_component_id))
             #GlobalComponent不应具有上游组件
-            if len(component.dependentComponent)>0:
+            if len(component.dependentComponent) > 0:
                 logger.error('GlobalComponent 不应具有上游组件')
                 raise RuntimeError()
-            if not pipeline_utils.db_check_pipeline(self._task_name,component.alias_model_name):
+            if not pipeline_utils.db_check_pipeline(
+                    self._task_name, component.alias_model_name):
                 #检查同一task下的model是否存在
-                logger.error('pipeline id :{}不存在 '.format('_'.join([self._task_name,component.alias_model_name])))
-                raise  exception.PipelineNotFoundError()
-            if not pipeline_utils.db_check_pipeline_component(self._task_name,component.alias_model_name,component.alias_component_id):
+                logger.error('pipeline id :{}不存在 '.format('_'.join(
+                    [self._task_name, component.alias_model_name])))
+                raise exception.PipelineNotFoundError()
+            if not pipeline_utils.db_check_pipeline_component(
+                    self._task_name, component.alias_model_name,
+                    component.alias_component_id):
                 #再检查别名的组件是否存在
-                logger.error('pipeline id :{}不存在 组件：{}'.format('_'.join([self._task_name,component.alias_model_name]),component.alias_component_id))
+                logger.error('pipeline id :{}不存在 组件：{}'.format(
+                    '_'.join([self._task_name, component.alias_model_name]),
+                    component.alias_component_id))
                 raise exception.ComponentNotFoundError()
             #然后再根据别名组件,得到他的deploytype
-            component.deploytype=pipeline_utils.db_get_pipeline_component_deploytype(self._task_name,component.alias_model_name,component.alias_component_id)
+            component.deploytype = pipeline_utils.db_get_pipeline_component_deploytype(
+                self._task_name, component.alias_model_name,
+                component.alias_component_id)
             #更新一下alias的组件，可能存在较长alias链，这时需要找到最初的那个
-            origin_model,origin_component=pipeline_utils.get_global_component_alias_component(self._task_name,self._model_name,component)
-            component.alias_component_id=origin_component
-            component.alias_model_name=origin_model
+            origin_model, origin_component = pipeline_utils.recursive_get_global_component_alias_component(
+                self._task_name, self._model_name, component)
+            component.alias_component_id = origin_component
+            component.alias_model_name = origin_model
 
         else:
             #说明是普通的组件，直接通过executor class的信息判断
-            if (bool(component._executor_cls.Do==BaseExecutor.Do)==bool(component._executor_cls.Cycle==BaseExecutor.Cycle)):
-                raise  SyntaxError('Do与Cycle必须有且只能有一个被重写') 
-            if(component._executor_cls.Do!=BaseExecutor.Do):
-                component.deploytype='Do'
+            if (bool(component._executor_cls.Do == BaseExecutor.Do) == bool(
+                    component._executor_cls.Cycle == BaseExecutor.Cycle)):
+                raise SyntaxError('Do与Cycle必须有且只能有一个被重写')
+            if (component._executor_cls.Do != BaseExecutor.Do):
+                component.deploytype = 'Do'
             else:
-                component.deploytype='Cycle'
+                component.deploytype = 'Cycle'
             #同时利用cache机制，判断是否可以利用之前的数据
-            pipeline_utils.compare_component(self._task_name,self._model_name,component)
+            pipeline_utils.compare_component(self._task_name, self._model_name,
+                                             component)
+
+    def allocate_component_artifact_url(self):
+        '''给pipeline每个组件分配artifact的存储目录
+        '''
+        for c in self.components:
+            if type(c) == GlobalComponent:
+                # 如果是共享组件，则会建立软链接目录
+                if not os.path.exists(
+                        os.path.join(global_config.OUTPUTSDIR, self._task_name,
+                                     c._alias_model_name,
+                                     c._alias_component_id)):
+                    logger.logger.error('全局组件{}的目录不存在'.format(c.id))
+                    raise exception.FileNotFoundError()
+                os.symlink(src=os.path.join(os.getcwd(),
+                                            global_config.OUTPUTSDIR,
+                                            self._task_name,
+                                            c._alias_model_name,
+                                            c._alias_component_id),
+                           dst=os.path.join(os.getcwd(),
+                                            global_config.OUTPUTSDIR,
+                                            self.rootdir, c.id))
+                c.artifact.setUrl(os.path.join(self.rootdir, c.id))
+            else:
+                if not os.path.exists(
+                        os.path.join(global_config.OUTPUTSDIR, self.rootdir,
+                                     c.id)):
+                    logger.logger.warning('组件{}的目录不存在,现在创建'.format(c.id))
+                    os.makedirs(os.path.join(global_config.OUTPUTSDIR,
+                                             self.rootdir, c.id),
+                                exist_ok=True)
+                c.artifact.setUrl(os.path.join(self.rootdir, c.id))
+
     def db_store(self):
         '''将数据保存到db里
 
@@ -244,23 +298,33 @@ class Pipeline():
         因为是先查询pipeline，所以保存得反着来
         '''
         for component in self.components:
-            if not pipeline_utils.db_update_pipeline_component(task_name=self._task_name,model_name=self._model_name,component=component):
-                logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(self.id,component.id))
+            if not pipeline_utils.db_update_pipeline_component(
+                    task_name=self._task_name,
+                    model_name=self._model_name,
+                    component=component):
+                logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(
+                    self.id, component.id))
                 raise exception.DBOpTypeError('数据库操作失败')
-        if not pipeline_utils.db_update_pipeline(self._task_name,self._model_name):
+        if not pipeline_utils.db_update_pipeline(self._task_name,
+                                                 self._model_name):
             logger.error('数据库更新pipeline id:{}失败'.format(self.id))
             raise exception.DBOpTypeError('数据库操作失败')
+
     def db_delete(self):
         '''将db里的数据删除
 
         先删除pipeline，再删除组件
         因为是先查询pipeline，所以保存得反着来
         '''
-        if not pipeline_utils.db_delete_pipeline(self._task_name,self._model_name):
+        if not pipeline_utils.db_delete_pipeline(self._task_name,
+                                                 self._model_name):
             logger.error('数据库删除pipeline id:{}失败'.format(self.id))
             raise exception.DBOpTypeError('数据库操作失败')
         for component in self.components:
-            if not pipeline_utils.db_delete_pipeline_component(task_name=self._task_name,model_name=self._model_name,component=component):
-                logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(self.id,component.id))
+            if not pipeline_utils.db_delete_pipeline_component(
+                    task_name=self._task_name,
+                    model_name=self._model_name,
+                    component=component):
+                logger.error('数据库更新pipeline id:{}下的组件: {}失败'.format(
+                    self.id, component.id))
                 raise exception.DBOpTypeError('数据库操作失败')
-
