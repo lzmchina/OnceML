@@ -81,7 +81,7 @@ class KfpComponent:
         d_artifact = {}  # 获取依赖的组件的artifact输出路径
         for c in component.upstreamComponents:
             if c.id in Do_deploytype:
-                d_channels[c.id] = depends_on[c.id].outputs
+                d_channels[c.id] = depends_on[c.id].outputs['channels']
             d_artifact[c.id] = c.artifact.url
         arguments = arguments + [
             '--d_channels', d_channels, '--d_artifact', d_artifact

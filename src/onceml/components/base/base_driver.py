@@ -1,3 +1,4 @@
+import json
 from typing import Dict, List
 import onceml.components.base.base_component as base_component
 import onceml.components.base.global_component as global_component
@@ -9,10 +10,11 @@ import os
 import sys
 import onceml.utils.logger as logger
 import onceml.global_config as global_config
-
+import onceml.utils.json_utils as json_utils
 import shutil
-
-
+from onceml.types.component_msg import Component_Data_URL
+from onceml.types.channel import Channels
+from onceml.types.artifact import Artifact
 class BaseDriverRunType(Enum):
     DO = 'Do'
     CYCLE = 'Cycle'
@@ -96,7 +98,19 @@ class BaseDriver(abc.ABC):
     def restore_state(self, component_dir: str):
         '''恢复组件的状态，如果状态文件有的话
         '''
-
+        state_file=os.path.join(component_dir,Component_Data_URL.STATE.value)
+        if not os.path.exists(state_file):
+            logger.logger.warning('{}下没有{}文件，没有状态可以恢复'.format(component_dir,Component_Data_URL.STATE.value))
+        else:
+            self._component.state=json.load(open(state_file,'r'))
+    def get_upstream_component_Do_type_result(self):
+        """获取上游组件中Do类型的结果与目录
+        """
+        Do_Channels={}
+        Do_Artifact={}
+        for key,value in self._d_channels:
+            Do_Channels[key]=Channels(data=value)
+            Do_Artifact[key]=Artifact(url=self._d_artifact[key])
     def run(self, uni_op_mudule: str):
         '''需要根据框架定义具体的执行逻辑
         description
@@ -113,7 +127,7 @@ class BaseDriver(abc.ABC):
                 - 如果是Do，则加载依赖的组件的结果，然后执行，结束后保存state，并向后续节点发送信号
                 - 如果是Cycle，则在收到依赖节点的信号，然后执行，每次执行完保存state，并向后续节点发送信号
         4. 判断_changed为false的deploytype：
-                - 如果是Do，则加载依赖的组件的结果，然后执行（这里考虑到可能上次的执行由于意外没完成，方便继续执行），结束后保存state，并向后续节点发送信号
+                - 如果是Do，则判断，然后执行（这里考虑到可能上次的执行由于意外没完成，方便继续执行），结束后保存state，并向后续节点中的cycle节点发送信号
                 - 如果是Cycle，则在收到依赖节点的信号，然后执行，每次执行完保存state，并向后续节点发送信号
         5. 结束
 
@@ -138,6 +152,7 @@ class BaseDriver(abc.ABC):
                 logger.logger.info('组件被修改，重建目录')
                 self.clear_component_data(component_dir=os.path.join(
                     global_config.OUTPUTSDIR, self._component.artifact.url))
+                Do_results=self.get_upstream_component_Do_type_result()
             else:
                 self.restore_state(component_dir=os.path.join(
                     global_config.OUTPUTSDIR, self._component.artifact.url))

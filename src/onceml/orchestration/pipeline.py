@@ -12,7 +12,6 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
-from os.path import expanduser
 from typing import List, Optional, Text, Dict
 from onceml.components import BaseComponent, BaseExecutor
 from onceml.utils.topsort import topsorted_layers
@@ -81,7 +80,7 @@ class Pipeline():
         self._model_name = model_name.lower()
         self.id = (task_name, model_name)
         self.components = components.values() or []
-        self.allocate_component_artifact_url
+        self.allocate_component_artifact_url()
         # 依赖的模型
         #self._depend_models = []
         #self.depend_models = depend_models
@@ -270,7 +269,7 @@ class Pipeline():
                         os.path.join(global_config.OUTPUTSDIR, self._task_name,
                                      c._alias_model_name,
                                      c._alias_component_id)):
-                    logger.logger.error('全局组件{}的目录不存在'.format(c.id))
+                    logger.error('全局组件{}的目录不存在'.format(c.id))
                     raise exception.FileNotFoundError()
                 os.symlink(src=os.path.join(os.getcwd(),
                                             global_config.OUTPUTSDIR,
@@ -285,7 +284,7 @@ class Pipeline():
                 if not os.path.exists(
                         os.path.join(global_config.OUTPUTSDIR, self.rootdir,
                                      c.id)):
-                    logger.logger.warning('组件{}的目录不存在,现在创建'.format(c.id))
+                    logger.warning('组件{}的目录不存在,现在创建'.format(c.id))
                     os.makedirs(os.path.join(global_config.OUTPUTSDIR,
                                              self.rootdir, c.id),
                                 exist_ok=True)

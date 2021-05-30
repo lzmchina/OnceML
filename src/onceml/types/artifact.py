@@ -16,11 +16,8 @@ class Artifact(json_utils.Jsonable):
 
     如果说Channel是针对轻量级数据，Artifact则是指比较的的数据文件，例如数据集、模型文件等，Artifact也是Component的重要组成部分，我们只需要指定组件的产生文件位置在哪就行（比如NFS，或者是容器里挂载的目录） 
     """
-    def __init__(self, url: str):
-        self._url = url
-
-    def __init__(self):
-        self._url = ''
+    def __init__(self, url: str = None):
+        self._url = url or ''
 
     @property
     def url(self):

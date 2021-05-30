@@ -10,7 +10,7 @@
 '''
 from onceml.types.artifact import Artifact
 from onceml.types.channel import Channels, OutputChannel
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
@@ -227,3 +227,9 @@ class BaseComponent(Jsonable):
             elif k in ['_downstreamComponents']:
                 json_dict[k] = [component.id for component in v]
         return json_dict
+    @property
+    def state(self)->Dict[str,Any]:
+        return self._state
+    @state.setter
+    def state(self,json2state:Dict[str,Any])->None:
+        self._state=json2state
