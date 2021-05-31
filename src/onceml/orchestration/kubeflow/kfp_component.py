@@ -81,14 +81,12 @@ class KfpComponent:
         d_artifact = {}  # 获取依赖的组件的artifact输出路径
         for c in component.upstreamComponents:
             if c.id in Do_deploytype:
-                d_channels[c.id] = depends_on[c.id].outputs['channels']
-            d_artifact[c.id] = c.artifact.url
+                d_channels[c.id] = os.path.join(c.artifact.url,component_msg.Component_Data_URL.CHANNELS.value)
+            d_artifact[c.id] =  os.path.join(c.artifact.url,component_msg.Component_Data_URL.ARTIFACTS.value)
         arguments = arguments + [
             '--d_channels', d_channels, '--d_artifact', d_artifact
         ]
-        if component.deploytype == 'Do':
-
-            self.container_op = dsl.ContainerOp(
+        self.container_op = dsl.ContainerOp(
                 name=component.id,
                 command=kfp_config.COMMAND,
                 image=kfp_config.IMAGE,
@@ -99,68 +97,29 @@ class KfpComponent:
                         kfp_config.WORKINGDIR, global_config.OUTPUTSDIR,
                         component.artifact.url,
                         component_msg.Component_Data_URL.CHANNELS.value),
-                    'channels':
-                    os.path.join(
-                        kfp_config.WORKINGDIR, global_config.OUTPUTSDIR,
-                        component.artifact.url,
-                        component_msg.Component_Data_URL.CHANNELS.value),
-                    'artifact':
-                    os.path.join(
-                        kfp_config.WORKINGDIR, global_config.OUTPUTSDIR,
-                        component.artifact.url,
-                        component_msg.Component_Data_URL.ARTIFACTS.value)
-                },
-                container_kwargs={
-                    'working_dir':
-                    kfp_config.WORKINGDIR,
-                    'volume_mounts': [
-                        k8s_ops.client.V1VolumeMount(
-                            name="nfs-volume",
-                            mount_path=kfp_config.WORKINGDIR)
-                    ]
-                })
 
-        else:
-            self.container_op = dsl.ContainerOp(
-                name=component.id,
-                command=kfp_config.COMMAND,
-                image=kfp_config.IMAGE,
-                arguments=arguments,
-                file_outputs={  # 存放组件的channels结果的文件，方便ui可视化
-                    'mlpipeline-ui-metadata':
-                    os.path.join(
-                        kfp_config.WORKINGDIR, global_config.OUTPUTSDIR,
-                        component.artifact.url,
-                        component_msg.Component_Data_URL.CHANNELS.value),
-                    'channels':
-                    os.path.join(
-                        kfp_config.WORKINGDIR, global_config.OUTPUTSDIR,
-                        component.artifact.url,
-                        component_msg.Component_Data_URL.CHANNELS.value),
-                    'artifact':
-                    os.path.join(
-                        kfp_config.WORKINGDIR, global_config.OUTPUTSDIR,
-                        component.artifact.url,
-                        component_msg.Component_Data_URL.ARTIFACTS.value)
                 },
                 container_kwargs={
                     'working_dir':
                     kfp_config.WORKINGDIR,
-                    'ports': [
-                        V1ContainerPort(
-                            container_port=kfp_config.SERVERPORT)  # 开放端口
-                    ],
                     'volume_mounts': [
                         k8s_ops.client.V1VolumeMount(
                             name="nfs-volume",
                             mount_path=kfp_config.WORKINGDIR)
                     ]
                 })
+        if component.deploytype == 'Cycle':
+            #如果是Cycle，则需要增加port配置
+            self.container_op.container.add_port(
+                V1ContainerPort(container_port=kfp_config.SERVERPORT)  # 开放端口
+            )
+
             # 设置一个init container，用来检查依赖的Cycle类型的组件server是否已经完成
             # self.container_op.add_init_container(dsl.UserContainer(
             #     name='check dependency',
             #     image='',
             # ))
+
             # 设置pod的label，保证Cycle类型的组件能够知道自己要向谁报告通信
             for c in component.upstreamComponents:
                 _model_name, _com_id = model_name, c.id

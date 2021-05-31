@@ -20,7 +20,12 @@ def test_container_entrypoint():
                      b=2,
                      resulta=channel.OutputChannel(str),
                      resultb=channel.OutputChannel(int))
-    b = myComponent2(executor=myExecutor2, inputs=[a], a=6, s=3)
+    b = myComponent2(executor=myExecutor2,
+                     inputs=[a],
+                     a=6,
+                     s=3,
+                     resulta=channel.OutputChannel(str),
+                     resultc=channel.OutputChannel(str))
     c = myComponent3(executor=myExecutor3, inputs=[a, b])
     p = Pipeline(task_name='task1',
                  model_name='modelA',
@@ -35,8 +40,16 @@ def test_container_entrypoint():
             '--serialized_component',
             json_utils.componentDumps(component)
         ]
-        d_channels = {'a': 'out/a'}  # 获取依赖的Do类型的组件的channel输出路径
-        d_artifact = {'b': 'out/b'}  # 获取依赖的组件的artifact输出路径
+        d_channels = {
+            'a': 'task1/modela/a/result.json',
+            'b': 'task1/modela/b/result.json',
+            'c': 'task1/modela/c/result.json',
+        }  # 获取依赖的Do类型的组件的channel输出路径
+        d_artifact = {
+            'a': 'task1/modela/a/artifact',
+            'b': 'task1/modela/b/artifact',
+            'c': 'task1/modela/c/artifact',
+        }  # 获取依赖的组件的artifact输出路径
         arguments = arguments + [
             '--d_channels', d_channels, '--d_artifact', d_artifact
         ]

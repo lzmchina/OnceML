@@ -10,6 +10,7 @@
 '''
 from onceml.types.artifact import Artifact
 from onceml.types.channel import Channels, OutputChannel
+from onceml.types.state import State
 from typing import Any, Dict, List, Optional
 from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
@@ -79,7 +80,7 @@ class BaseComponent(Jsonable):
         # 初始化Artifact
         self._artifact = Artifact()
         # 组件状态
-        self._state = []
+        self._state = State()
         #组件是否会共享
         self._datashared = shared
         # 找到依赖的组件后，就该将他们的channel、artifact加入进来，这个具体的由pipeline操作
@@ -96,29 +97,6 @@ class BaseComponent(Jsonable):
         self._downstreamComponents = set()
         #cache机制，判断当前组件是否与之前的组件有所变动,默认改变了，需要删除之前的数据
         self._changed = True
-
-    def pre_execute(self):
-        '''
-        '''
-
-    def execute(self):
-        """execute就是组件实际运行的逻辑
-
-        从拿到依赖组件（上游组件）的Channels、artifact序列化数据并反序列化，再执行
-
-        executor应该由开发者二次继承开发
-        """
-        self._executor = self._executor_cls()
-        if self._executor is None:
-            raise Exception('executor未定义')
-        if self._executor._type == 'Do':
-            self._executor.Do(self._params,
-                              input_channels=self._dependentChannels,
-                              input_artifacts=self._dependentArtifacts)
-        elif self._executor._type == 'Cycle':
-            self._executor.Cycle(self._params,
-                                 input_channels=self._dependentChannels,
-                                 input_artifacts=self._dependentArtifacts)
 
     @property
     def inputs(self):
@@ -224,12 +202,14 @@ class BaseComponent(Jsonable):
                     '_dependentComponent'
             ]:
                 json_dict[k] = v
-            elif k in ['_downstreamComponents']:
+            elif k in ['_downstreamComponents', '_upstreamComponents']:
                 json_dict[k] = [component.id for component in v]
         return json_dict
+
     @property
-    def state(self)->Dict[str,Any]:
+    def state(self) -> State:
         return self._state
+
     @state.setter
-    def state(self,json2state:Dict[str,Any])->None:
-        self._state=json2state
+    def state(self, json2state: Dict[str, Any]) -> None:
+        self._state=State(data=json2state)

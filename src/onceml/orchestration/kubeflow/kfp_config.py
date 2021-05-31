@@ -1,7 +1,7 @@
 import onceml.global_config as global_config
 import os
 # 包含镜像的一些信息
-IMAGE = 'liziming/{}:0.0.1'.format(global_config.project_name)
+IMAGE = 'liziming/{}:latest'.format(global_config.project_name)
 COMMAND = [
     'python3', '-m', '{}.orchestration.kubeflow.container_entrypoint'.format(
         global_config.project_name)

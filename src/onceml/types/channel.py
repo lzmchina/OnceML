@@ -9,7 +9,7 @@
 @version	:0.0.1
 '''
 from onceml.utils.json_utils import  Jsonable
-
+from onceml.utils.json_utils import componentDumps
 
 class Channels(Jsonable):
     """Channels是一种数据交换格式，可以理解为内置了字典的class，提供了数据的序列化与反序列化
@@ -28,7 +28,8 @@ class Channels(Jsonable):
 
     def to_json_dict(self):
         return self.__dict__.items()
-
+    def __getitem__(self,key):
+        return self._data.get(key)
 
 class OutputChannel(Jsonable):
     """OutputChannel是Channels的一个key-value对
