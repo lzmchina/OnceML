@@ -8,10 +8,10 @@
 
 @version	:0.0.1
 '''
-from onceml.utils.json_utils import  Jsonable
-from onceml.utils.json_utils import componentDumps
+import onceml.utils.json_utils as json_utils
 
-class Channels(Jsonable):
+
+class Channels(json_utils.Jsonable):
     """Channels是一种数据交换格式，可以理解为内置了字典的class，提供了数据的序列化与反序列化
 
     组件之间需要交换轻量级的数据，比如环境配置、执行的参数等。因此Channel负责将数据序列化，作为Component的一部分（input、output）。
@@ -21,7 +21,7 @@ class Channels(Jsonable):
     def __init__(self, data: dict):
         if not isinstance(data, dict):
             raise TypeError
-        self._data = dict()
+        self._data = data
 
     def update(self, key, value):
         self._data.update({key: value})
@@ -31,7 +31,7 @@ class Channels(Jsonable):
     def __getitem__(self,key):
         return self._data.get(key)
 
-class OutputChannel(Jsonable):
+class OutputChannel(json_utils.Jsonable):
     """OutputChannel是Channels的一个key-value对
 
     由于不同组件运行在不同的进程里、节点里，因此需要对数据进行序列化，尤其是Channels这种直接交互的数据；因此对value的数据类型

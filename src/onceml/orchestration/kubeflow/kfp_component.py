@@ -136,7 +136,7 @@ class KfpComponent:
                         task=task_name,
                         model_name=_model_name,
                         component=_com_id),
-                    value='1')
+                    value=kfp_config.COMPONENT_SENDER_POD_VALUE)
         # 设置本组件要在Do类型组件完成之后启动
         for c_id, v in depends_on.items():
             if c_id in Do_deploytype:

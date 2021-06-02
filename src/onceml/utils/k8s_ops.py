@@ -1,4 +1,5 @@
 import os
+from typing import List
 from kubernetes import client, config
 import socket
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
@@ -23,6 +24,11 @@ def get_crd_instance_list(namespace: str, group: str, label_selector: str,
         version=version,
         plural=plural,
         label_selector=label_selector)
+
+
+def get_pods_by_label(namespace: str, label_selector: str)->List[client.V1Pod]:
+    return _k8s_client.list_namespaced_pod(namespace=namespace,
+                                           label_selector=label_selector)['items'] or []
 
 
 def delete_crd_instance(namespace: str, group: str, name: str, version: str,

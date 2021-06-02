@@ -1,11 +1,12 @@
-from onceml.components import BaseComponent, BaseExecutor
+from onceml.components.base import BaseComponent, BaseExecutor
 
 
 class myExecutor1(BaseExecutor):
-    def Do(self, state, params, input_channels=None, input_artifacts=None):
+    def Do(self, state, params,data_dir, input_channels=None, input_artifacts=None):
         print('current component:', self.__class__)
         print('params', params)
         print('state', state)
+        print('data_dir',data_dir)
         print('input_channels', input_channels)
         print('input_artifacts', input_artifacts)
         for key, value in input_channels.items():
@@ -24,9 +25,10 @@ class myComponent1(BaseComponent):
 
 
 class myExecutor2(BaseExecutor):
-    def Do(self, state, params, input_channels=None, input_artifacts=None):
+    def Do(self, state, params,data_dir, input_channels=None, input_artifacts=None):
         print('current component:', self.__class__)
         print('params', params)
+        print('data_dir',data_dir)
         print('state', state)
         print('input_channels', input_channels)
         print('input_artifacts', input_artifacts)
@@ -38,7 +40,8 @@ class myExecutor2(BaseExecutor):
             print(key)
             print(value.__dict__)
         return {
-            
+            'resulta':'4545',
+            'resultc':'scs'
         }
 
 
@@ -48,9 +51,10 @@ class myComponent2(BaseComponent):
 
 
 class myExecutor3(BaseExecutor):
-    def Do(self, state, params, input_channels=None, input_artifacts=None):
+    def Do(self, state, params,data_dir, input_channels=None, input_artifacts=None):
         print('current component:', self.__class__)
         print('params', params)
+        print('data_dir',data_dir)
         print('state', state)
         print('input_channels', input_channels)
         for key, value in input_channels.items():
@@ -69,7 +73,7 @@ class myComponent3(BaseComponent):
 
 
 class myExecutor4(BaseExecutor):
-    def Cycle(self, state, params, input_channels=None, input_artifacts=None):
+    def Cycle(self, state, params, data_dir,input_channels=None, input_artifacts=None):
         print('current component:', self.__class__)
         print(params)
         return {}

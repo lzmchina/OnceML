@@ -1,4 +1,5 @@
 import json
+from logging import log
 from typing import Any, Dict, List
 import onceml.components.base.base_component as base_component
 import onceml.components.base.global_component as global_component
@@ -17,11 +18,21 @@ from onceml.types.channel import Channels, OutputChannel
 from onceml.types.artifact import Artifact
 from onceml.types.state import State
 import onceml.utils.pipeline_utils as pipeline_utils
+from http.server import BaseHTTPRequestHandler
+from http.server import HTTPServer
 
 
 class BaseDriverRunType(Enum):
     DO = 'Do'
     CYCLE = 'Cycle'
+
+
+class BaseHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        pass
+
+    def do_POST(self):
+        pass
 
 
 class BaseDriver(abc.ABC):
@@ -102,12 +113,19 @@ class BaseDriver(abc.ABC):
         -------
         
         """
-        #系统的pre_execute
-        #step 1 ：启动http服务器
-        
-        #用户自定义的pre_execute逻辑
-        self._executor.pre_execute()
+        pass
 
+    def build_msg_queue(self):
+        '''为cycle组件构建消息队列，用于接收上游cycle组件的消息，如果有的话
+        '''
+
+    def start_server(self):
+        '''为cycle组件启动一个server
+        '''
+        self.server = HTTPServer(('0.0.0.0', global_config.SERVERPORT),
+                                 BaseHandler)
+        logger.logger.info('start server')
+        self.server.serve_forever()
 
     def execute(self, input_channels: Dict[str, Channels],
                 input_artifacts: Dict[str, Artifact]):
@@ -121,8 +139,25 @@ class BaseDriver(abc.ABC):
         self._component.state.dump()
         return self._executor_func(state=self._component.state,
                                    params=self._component._params,
+                                   data_dir=os.path.join(
+                                       global_config.OUTPUTSDIR,
+                                       self._component.artifact.url,
+                                       Component_Data_URL.ARTIFACTS.value),
                                    input_channels=input_channels,
                                    input_artifacts=input_artifacts)
+
+    def send_channels(self, validated_channels: Dict):
+        '''将经过验证的结果发送给后续cycle节点（如果有的话）
+        '''
+        try:
+            get_ip_by_label_func = getattr(self._uniop, 'get_ip_by_label')
+            host_list = get_ip_by_label_func(task_name=self._pipeline_root[0],
+                                           model_name=self._pipeline_root[1],
+                                           component_id=self._component.id)
+            #开始并发式的发送消息
+            
+        except:
+            logger.logger.error('没有在{}找到get_ip_by_label函数'.format(self._uniop))
 
     def base_component_run(self):
         """普通组件的运行
@@ -166,8 +201,33 @@ class BaseDriver(abc.ABC):
             pipeline_utils.change_components_phase_to_finished(
                 self._pipeline_id, self._component.id)
         else:
-            #首先是系统与用户自定义的pre_execute逻辑
-            self.pre_execute_cycle()
+            #首先用户自定义的pre_execute逻辑
+            self._executor.pre_execute()
+            #然后再根据组件是否有cycle类型的上游组件来进行后面的操作
+            #如果是没有cycle上游组件，则认为他是信号源，需要不断的执行，并向后发送消息
+            #如果有，则认为他是由前面
+            if len(self._d_channels) == len(
+                    self._component._upstreamComponents):
+                logger.logger.info('该组件是信号源')
+                #就直接循环执行
+                while True:
+                    channel_result = self.execute(Do_Channels,
+                                                  Do_Artifacts)  #获得运行的结果
+                    #再对channel_result里的结果进行数据校验，只要channel_types里的字段
+                    validated_channels = self.data_type_validate(
+                        types_dict=channel_types, data=channel_result)
+                    #将state保存
+                    self._component.state.dump()
+                    #将结果发送给后续cycle节点(如果有的话)
+                    self.send_channels(validated_channels)
+
+            else:
+                logger.logger.info('该组件受到前面组件信号的控制')
+                #step 2:构建消息队列缓存区
+
+                #step 3 ：启动http服务器
+                #self.start_server()
+
     def clear_component_data(self, component_dir: str):
         """删除组件的数据
         description

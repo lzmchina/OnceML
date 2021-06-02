@@ -2,7 +2,7 @@ from typing import List
 import kfp
 from onceml.orchestration.runner import BaseRunner
 from onceml.orchestration import Pipeline
-from onceml.components import BaseComponent, GlobalComponent
+from onceml.components.base import BaseComponent, GlobalComponent
 from kfp import compiler
 from kfp import dsl
 import os

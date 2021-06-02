@@ -33,6 +33,7 @@ class BaseExecutor:
     def Do(self,
            state:State ,
            params: dict,
+           data_dir:str,
            input_channels: Optional[Dict[str, Channels]] = None,
            input_artifacts: Optional[Dict[str, Artifact]] = None) -> Channels:
         """
@@ -45,6 +46,7 @@ class BaseExecutor:
         Args
         -------
         params (dict):用户运行前确定的参数
+        data_dir:提供给用户保存数据用额目录
         input_channels:本组件所依赖的组件的Channels
         input_artifacts：本组件所依赖的组件的Artifact
 
@@ -66,6 +68,7 @@ class BaseExecutor:
             self,
             state: State,
             params: dict,
+            data_dir,
             input_channels: Optional[Dict[str, Channels]] = None,
             input_artifacts: Optional[Dict[str, Artifact]] = None) -> Channels:
         """
@@ -78,6 +81,7 @@ class BaseExecutor:
         Args
         -------
         params (dict):用户运行前确定的参数
+        data_dir:提供给用户保存数据用额目录
         input_channels:本组件所依赖的组件的Channels
         input_artifacts：本组件所依赖的组件的Artifact
 

@@ -13,7 +13,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 from typing import List, Optional, Text, Dict
-from onceml.components import BaseComponent, BaseExecutor
+from onceml.components.base import BaseComponent, BaseExecutor
 from onceml.utils.topsort import topsorted_layers
 import os
 import onceml.types.exception as exception

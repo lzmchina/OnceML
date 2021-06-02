@@ -8,7 +8,7 @@ COMMAND = [
 ]
 WORKINGDIR = '/project'  # 容器里代码工程被挂载的目录，会在这里面执行命令
 
-SERVERPORT = 8080
+SERVERPORT = global_config.SERVERPORT or  8080
 
 SVCNAME = 'ml-pipeline-ui'
 NAMESPACE = 'kubeflow'
@@ -31,6 +31,7 @@ RUNS_PAGE_SIZE = 30
 COMPONENT_SENDER_POD_LABEL = '{tool}.{project}.{{task}}.{{model}}.{{component}}'.format(
     tool=global_config.project_name,
     project=global_config.PROJECTDIRNAME).lower()
+COMPONENT_SENDER_POD_VALUE='1'
 # NFS容器相关
 #NFS_IMAGE = 'gists/nfs-server'#cpuguy83/nfs-server itsthenetwork/nfs-server-alpine
 NFS_IMAGE = 'itsthenetwork/nfs-server-alpine'
