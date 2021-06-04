@@ -12,4 +12,4 @@ PROJECTDIRNAME = os.path.split(PROJECTDIR)[1]
 PROJECTPARENtDIR = os.path.split(PROJECTDIR)[0]
 database_file = path.join(PROJECTDIR, database_dir,
                           '{}.db'.format(project_name))
-SERVERPORT = 8080
+SERVERPORT = 10086

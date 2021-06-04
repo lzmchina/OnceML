@@ -1,14 +1,13 @@
 import dbm
+import dbm.dumb
 import os
 import sys
 import onceml.global_config as global_config
-
 os.makedirs(os.path.join(os.getcwd(), global_config.database_dir),
             exist_ok=True)
 
-
 def init_db(path: str):
-    return dbm.open(path, 'c')
+    return dbm.dumb.open(path, 'c')
 
 
 db_connector = init_db(global_config.database_file)

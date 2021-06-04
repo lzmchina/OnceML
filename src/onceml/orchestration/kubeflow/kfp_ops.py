@@ -98,7 +98,7 @@ def ensure_pipeline(client: kfp.Client, package_path: str, pipeline: Pipeline):
                                             version=kfp_config.wf_version,
                                             plural=kfp_config.wf_plural,
                                             name=wf["metadata"]['name'])
-            #最后再删除run
+            # 最后再删除run
             client._run_api.delete_run(id=instance)
     # 为0，说明该pipeline是第一次创建或者是被用户使用其他方法手动删除了，这时需要在数据库里删除相应信息
 
@@ -156,10 +156,12 @@ def ensure_nfs_svc(NFS_SVC_NAME: str, selector: dict):
 def get_ip_port_by_label(task_name: str, model_name: str, component_id: str):
     '''通过label找到一组pod的内部ip地址
     '''
+
     pod_list = k8s_ops.get_pods_by_label(
         namespace=kfp_config.NAMESPACE,
         label_selector="{}={}".format(
             kfp_config.COMPONENT_SENDER_POD_LABEL.format(
-                task=task_name, model_name=model_name, component=component_id),
+                task=task_name, model=model_name, component=component_id),
             kfp_config.COMPONENT_SENDER_POD_VALUE))
+    
     return [[pod.status.pod_ip, kfp_config.SERVERPORT] for pod in pod_list]

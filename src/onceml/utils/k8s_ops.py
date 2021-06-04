@@ -28,7 +28,7 @@ def get_crd_instance_list(namespace: str, group: str, label_selector: str,
 
 def get_pods_by_label(namespace: str, label_selector: str)->List[client.V1Pod]:
     return _k8s_client.list_namespaced_pod(namespace=namespace,
-                                           label_selector=label_selector)['items'] or []
+                                           label_selector=label_selector).items or []
 
 
 def delete_crd_instance(namespace: str, group: str, name: str, version: str,

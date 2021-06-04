@@ -1,4 +1,6 @@
 
+import grequests
+import requests
 import onceml.types.channel as channel
 from onceml.orchestration import KubeflowRunner, Pipeline
 import onceml.utils.json_utils as json_utils
@@ -45,9 +47,45 @@ def test_container_entrypoint():
                 s += "'" + i + "'"
             else:
                 s += "'" + json_utils.simpleDumps(i) + "'"
-        os.system(' '.join(command) + s)
         print('------------')
+        os.system(' '.join(command) + s)
+def test_container_entrypoint_receiver():
+    b = myComponent1(executor=myExecutor1,
+                     a=1,
+                     b=2,
+                     resulta=channel.OutputChannel(str),
+                     resultb=channel.OutputChannel(int))
+    p = Pipeline(task_name='task1',
+                 model_name='modelA',
+                 components={
+                     'b': b,
+                 })
+    for component in p.components:
+        arguments = [
+            '--pipeline_root', [p._task_name, p._model_name],
+            '--serialized_component',
+            json_utils.componentDumps(component)
+        ]
+        d_channels = {
+            'a':'a'
+        }  # 获取依赖的Do类型的组件的channel输出路径
+        d_artifact = {
+            
+        }  # 获取依赖的组件的artifact输出路径
+        arguments = arguments + [
+            '--d_channels', d_channels, '--d_artifact', d_artifact
+        ]
+        s = ''
+        for i in arguments:
+            s += ' '
+            if type(i) == str:
+                s += "'" + i + "'"
+            else:
+                s += "'" + json_utils.simpleDumps(i) + "'"
+        print('------------')
+        os.system(' '.join(command) + s)
 
 
 if __name__ == "__main__":
-    test_container_entrypoint()
+    #test_container_entrypoint()
+    test_container_entrypoint_receiver()
