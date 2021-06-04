@@ -30,7 +30,7 @@ def update(key, value):
 
 def select(key):
     if db_connector.get(key):
-        return db_connector[key]
+        return db_connector[key].decode('utf-8')
     else:
         return None
 

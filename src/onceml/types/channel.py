@@ -18,8 +18,8 @@ class Channels(json_utils.Jsonable):
     当不同组件之间需要交换数据时，Component将发送给后续的组件Component,
     
     """
-    def __init__(self, data: dict):
-        if not isinstance(data, dict):
+    def __init__(self, data: dict=None):
+        if data is not None and not isinstance(data, dict):
             raise TypeError
         self._data = data
 

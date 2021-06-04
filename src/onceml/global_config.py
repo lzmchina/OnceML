@@ -1,7 +1,6 @@
 import os
 import os.path as path
-
-project_name = 'onceml'
+project_name = __package__
 logging_level_env = project_name + '_log'
 database_dir = '.db'
 OUTPUTSDIR = '{}outputs'.format(project_name)  # 输出目录，每个组件的输出会保存在这

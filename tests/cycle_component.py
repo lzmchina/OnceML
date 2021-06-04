@@ -1,3 +1,4 @@
+import time
 from onceml.components.base import BaseComponent, BaseExecutor
 class myExecutor1(BaseExecutor):
     def Cycle(self, state, params, data_dir,input_channels=None, input_artifacts=None):
@@ -13,6 +14,7 @@ class myExecutor1(BaseExecutor):
         for key, value in input_artifacts.items():
             print(key)
             print(value.__dict__)
+        time.sleep(60)
         return {'resulta': 'fdfdf', 'resultb': 25}
 
     def pre_execute(self):

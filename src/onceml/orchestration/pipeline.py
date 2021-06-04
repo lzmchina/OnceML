@@ -37,6 +37,7 @@ class Pipeline():
 
     而且一个pipeline要做到模型分离，对于同一个场景，使用的数据相同，而模型不同，所以需要做到模型的训练分离
     '''
+
     def __init__(self, task_name: str, model_name: str,
                  components: Optional[Dict[str, BaseComponent]]):
         """
@@ -129,7 +130,7 @@ class Pipeline():
         chars = set('-_/')
         task_name, model_name = tuple_name[0], tuple_name[1]
         if any((c in chars) for c in task_name) or any(
-            (c in chars) for c in model_name):
+                (c in chars) for c in model_name):
             raise RuntimeError(
                 "pipeline的task name:%s 或者 model name:%s不能包含 '{}'符号 " %
                 (task_name, model_name, chars))
@@ -187,7 +188,7 @@ class Pipeline():
             logger.info('第 %d 层' % index)
             for component in layer:
                 logger.info('component id %s' % component.id)
-                #对component的deploytype继续填充，因为组件没有这一步骤，GlobalComponent类型的组件需要找到他的别名组件
+                # 对component的deploytype继续填充，因为组件没有这一步骤，GlobalComponent类型的组件需要找到他的别名组件
                 self.fill_c_deploytype_field(component)
 
                 if component.deploytype is None:
@@ -218,36 +219,37 @@ class Pipeline():
             logger.info('pipeline: {} 的component :{}为全局组件，别名{}中{}组件'.format(
                 self.id, component.id, component.alias_model_name,
                 component.alias_component_id))
-            #GlobalComponent不应具有上游组件
-            if len(component.dependentComponent) > 0:
-                logger.error('GlobalComponent 不应具有上游组件')
-                raise RuntimeError()
-            if not pipeline_utils.db_check_pipeline(
-                    self._task_name, component.alias_model_name):
-                #检查同一task下的model是否存在
-                logger.error('pipeline id :{}不存在 '.format('_'.join(
-                    [self._task_name, component.alias_model_name])))
-                raise exception.PipelineNotFoundError()
-            if not pipeline_utils.db_check_pipeline_component(
-                    self._task_name, component.alias_model_name,
-                    component.alias_component_id):
-                #再检查别名的组件是否存在
-                logger.error('pipeline id :{}不存在 组件：{}'.format(
-                    '_'.join([self._task_name, component.alias_model_name]),
-                    component.alias_component_id))
-                raise exception.ComponentNotFoundError()
-            #然后再根据别名组件,得到他的deploytype
-            component.deploytype = pipeline_utils.db_get_pipeline_component_deploytype(
-                self._task_name, component.alias_model_name,
-                component.alias_component_id)
-            #更新一下alias的组件，可能存在较长alias链，这时需要找到最初的那个
-            origin_model, origin_component = pipeline_utils.recursive_get_global_component_alias_component(
-                self._task_name, self._model_name, component)
-            component.alias_component_id = origin_component
-            component.alias_model_name = origin_model
-
+            assert component.id == component.alias_component_id, "为避免后续组件接收id重复问题，global component的id要与alias一致"
+            # # GlobalComponent不应具有上游组件
+            # if len(component.dependentComponent) > 0:
+            #     logger.error('GlobalComponent 不应具有上游组件')
+            #     raise RuntimeError()
+            # if not pipeline_utils.db_check_pipeline(
+            #         self._task_name, component.alias_model_name):
+            #     # 检查同一task下的model是否存在
+            #     logger.error('pipeline id :{}不存在 '.format(pipeline_utils.generate_pipeline_id(
+            #         task_name=self._task_name, model_name=component.alias_model_name)))
+            #     raise exception.PipelineNotFoundError()
+            # if not pipeline_utils.db_check_pipeline_component(
+            #         self._task_name, component.alias_model_name,
+            #         component.alias_component_id):
+            #     # 再检查别名的组件是否存在
+            #     logger.error('pipeline id :{}不存在 组件：{}'.format(
+            #         '_'.join([self._task_name, component.alias_model_name]),
+            #         component.alias_component_id))
+            #     raise exception.ComponentNotFoundError()
+            # # 然后再根据别名组件,得到他的deploytype
+            # component.deploytype = pipeline_utils.db_get_pipeline_component_deploytype(
+            #     self._task_name, component.alias_model_name,
+            #     component.alias_component_id)
+            # # 更新一下alias的组件，可能存在较长alias链，这时需要找到最初的那个
+            # origin_model, origin_component = pipeline_utils.recursive_get_global_component_alias_component(
+            #     self._task_name, self._model_name, component)
+            # component.alias_component_id = origin_component
+            # component.alias_model_name = origin_model
+            component.deploytype='Cycle'
         else:
-            #说明是普通的组件，直接通过executor class的信息判断
+            # 说明是普通的组件，直接通过executor class的信息判断
             if (bool(component._executor_cls.Do == BaseExecutor.Do) == bool(
                     component._executor_cls.Cycle == BaseExecutor.Cycle)):
                 raise SyntaxError('Do与Cycle必须有且只能有一个被重写')
@@ -255,7 +257,7 @@ class Pipeline():
                 component.deploytype = 'Do'
             else:
                 component.deploytype = 'Cycle'
-            #同时利用cache机制，判断是否可以利用之前的数据
+            # 同时利用cache机制，判断是否可以利用之前的数据
             pipeline_utils.compare_component(self._task_name, self._model_name,
                                              component)
 
@@ -265,29 +267,29 @@ class Pipeline():
         for c in self.components:
             if type(c) == GlobalComponent:
                 # 如果是共享组件，则会建立软链接目录
-                if not os.path.exists(
-                        os.path.join(global_config.OUTPUTSDIR, self._task_name,
-                                     c._alias_model_name,
-                                     c._alias_component_id)):
-                    logger.error('全局组件{}的目录不存在'.format(c.id))
-                    raise exception.FileNotFoundError()
-                os.symlink(src=os.path.join(os.getcwd(),
-                                            global_config.OUTPUTSDIR,
-                                            self._task_name,
-                                            c._alias_model_name,
-                                            c._alias_component_id),
-                           dst=os.path.join(os.getcwd(),
-                                            global_config.OUTPUTSDIR,
-                                            self.rootdir, c.id))
+                # if not os.path.exists(
+                #         os.path.join(global_config.OUTPUTSDIR, self._task_name,
+                #                      c._alias_model_name,
+                #                      c._alias_component_id)):
+                #     logger.error('全局组件{}的目录不存在'.format(c.id))
+                #     raise exception.FileNotFoundError()
+                # os.symlink(src=os.path.join(os.getcwd(),
+                #                             global_config.OUTPUTSDIR,
+                #                             self._task_name,
+                #                             c._alias_model_name,
+                #                             c._alias_component_id),
+                #            dst=os.path.join(os.getcwd(),
+                #                             global_config.OUTPUTSDIR,
+                #                             self.rootdir, c.id))
                 c.artifact.setUrl(os.path.join(self.rootdir, c.id))
             else:
-                if not os.path.exists(
-                        os.path.join(global_config.OUTPUTSDIR, self.rootdir,
-                                     c.id)):
-                    logger.warning('组件{}的目录不存在,现在创建'.format(c.id))
-                    os.makedirs(os.path.join(global_config.OUTPUTSDIR,
-                                             self.rootdir, c.id),
-                                exist_ok=True)
+                # if not os.path.exists(
+                #         os.path.join(global_config.OUTPUTSDIR, self.rootdir,
+                #                      c.id)):
+                #     logger.warning('组件{}的目录不存在,现在创建'.format(c.id))
+                #     os.makedirs(os.path.join(global_config.OUTPUTSDIR,
+                #                              self.rootdir, c.id),
+                #                 exist_ok=True)
                 c.artifact.setUrl(os.path.join(self.rootdir, c.id))
 
     def db_store(self):

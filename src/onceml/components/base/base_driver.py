@@ -1,4 +1,5 @@
 import json
+import time
 import grequests
 
 import urllib
@@ -12,7 +13,7 @@ import onceml.types.exception as exception
 import abc
 import importlib
 import os
-
+import sys
 import onceml.utils.logger as logger
 import onceml.global_config as global_config
 import onceml.utils.json_utils as json_utils
@@ -27,6 +28,7 @@ from http.server import HTTPServer
 import threading
 import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
 import onceml.utils.time as time_utils
+import onceml.types.phases as phases
 
 
 class BaseDriverRunType(Enum):
@@ -59,7 +61,7 @@ def generate_handler(driver_instance):
             '''
             msg = dict(json.loads(json_str))
             compoent_id = msg.pop('component')
-            self._driver_instance.add_msg_to_queue(compoent_id, msg)
+            self._driver_instance.add_msg(compoent_id, msg)
 
         def do_GET(self):
             '''用来充当server的get处理
@@ -132,7 +134,7 @@ class BaseDriver(abc.ABC):
             self._executor_func = self._executor.Do
         else:
             self._executor_func = self._executor.Cycle
-        self._upstream_msg_queue: Dict[str, base_executor.BaseExecutor] = {}
+        self._upstream_msg_queue: Dict[str, dict] = {}
         # Cycle类型的组件不仅要接收前面的组件的消息，并储存，还要另外的循环执行Cycle逻辑，因此消息的存储与消耗是需要用锁控制的
         self._upstream_msg_queue_lock: threading.Lock = None
         self.server = None
@@ -141,7 +143,8 @@ class BaseDriver(abc.ABC):
         """GlobalComponent的运行
         description
         ---------
-
+        - 如果是Do，则判断其alias的组件的状态是否是finished，直到其finished就跳至{}结束
+        - 如果是Cycle，则判断组件的phase是否是running即可就跳至{}退出
         Args
         -------
 
@@ -152,8 +155,80 @@ class BaseDriver(abc.ABC):
         -------
 
         """
-
-        pass
+        # 如果是共享组件，则会建立软链接目录
+        if not os.path.exists(
+                os.path.join(global_config.OUTPUTSDIR, self._pipeline_root[0],
+                             self._component._alias_model_name,
+                             self._component._alias_component_id)):
+            logger.logger.error('全局组件{}的依赖目录不存在'.format(self._component.id))
+            raise exception.FileNotFoundError()
+        try:
+            os.symlink(src=os.path.join(os.getcwd(),
+                                        global_config.OUTPUTSDIR,
+                                        self._pipeline_root[0],
+                                        self._component._alias_model_name,
+                                        self._component._alias_component_id),
+                       dst=os.path.join(os.getcwd(),
+                                        global_config.OUTPUTSDIR,
+                                        self._pipeline_root[0],
+                                        self._pipeline_root[1],
+                                        self._component.id))
+        except FileExistsError:
+            logger.logger.warning('全局组件{}的软链接目录已经存在'.format(self._component.id))
+        if self._runtype == BaseDriverRunType.DO.value:
+            while True:
+                phase = pipeline_utils.db_get_pipeline_component_phase(
+                    task_name=self._pipeline_root[0],
+                    model_name=self._component._alias_model_name,
+                    component=self._component
+                )
+                if phase == phases.Component_PHASES.FINISHED.value:
+                    logger.logger.info('组件{}:{} alias的组件{}:{}已经finished，可以退出进程'.format(
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._pipeline_root[1]),
+                        self._component.id,
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._component._alias_model_name),
+                        self._component._alias_component_id
+                    ))
+                    break
+                else:
+                    logger.logger.info('组件{}:{} alias的组件{}:{}没有finished，继续监听'.format(
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._pipeline_root[1]),
+                        self._component.id,
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._component._alias_model_name),
+                        self._component._alias_component_id
+                    ))
+                time.sleep(2)
+        else:
+            while True:
+                phase = pipeline_utils.db_get_pipeline_component_phase(
+                    task_name=self._pipeline_root[0],
+                    model_name=self._component._alias_model_name,
+                    component=self._component.id
+                )
+                if phase == phases.Component_PHASES.RUNNING.value:
+                    logger.logger.info('组件{}:{} alias的组件{}:{}正在running，可以退出进程'.format(
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._pipeline_root[1]),
+                        self._component.id,
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._component._alias_model_name),
+                        self._component._alias_component_id
+                    ))
+                    break
+                else:
+                    logger.logger.info('组件{}:{} alias的组件{}:{}没有running，继续监听'.format(
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._pipeline_root[1]),
+                        self._component.id,
+                        pipeline_utils.generate_pipeline_id(
+                            self._pipeline_root[0], self._component._alias_model_name),
+                        self._component._alias_component_id
+                    ))
+                time.sleep(2)
 
     def pre_execute_cycle(self):
         """在cycle类型组件开始执行cycle之前的pre execute
@@ -178,12 +253,11 @@ class BaseDriver(abc.ABC):
         '''
         self._upstream_msg_queue = {}
         self._upstream_msg_queue_lock = threading.Lock()
-        # for upstream in self._component._upstreamComponents:
-        for upstream in ['a', 'b']:
+        for upstream in self._d_artifact:
             if upstream not in self._d_channels:  # 只考虑上游组件里的Cycle类型
                 self._upstream_msg_queue[upstream] = None
 
-    def add_msg_to_queue(self, key: str, msg_dict: dict):
+    def add_msg(self, key: str, msg_dict: dict):
         '''将某个上游cycle组件传来的消息放入队列里
         '''
         self._upstream_msg_queue_lock.acquire()
@@ -193,7 +267,17 @@ class BaseDriver(abc.ABC):
             self._upstream_msg_queue[key] = msg_dict if msg_dict['timestamp'] > self._upstream_msg_queue[
                 key]['timestamp'] else self._upstream_msg_queue[key]
         self._upstream_msg_queue_lock.release()
-        self.show_queue()
+        # self.show_queue()
+
+    def pop_all_msg(self):
+        '''获得目前的所有上游cycle类型的消息
+        '''
+        self._upstream_msg_queue_lock.acquire()
+        result = self._upstream_msg_queue.copy()
+        for key in self._upstream_msg_queue:
+            self._upstream_msg_queue[key] = None
+        self._upstream_msg_queue_lock.release()
+        return result
 
     def show_queue(self):
         for key, value in self._upstream_msg_queue.items():
@@ -274,13 +358,13 @@ class BaseDriver(abc.ABC):
 
         """
         # 先获取上游节点中的Do类型的结果，因为这些都是已经确定的
-        Do_Channels, Do_Artifacts = self.get_upstream_component_Do_type_result(
+        Do_Channels, Artifacts = self.get_upstream_component_Do_type_result(
         )
         # 确保arifact目录存在
         os.makedirs(
             os.path.join(global_config.OUTPUTSDIR,
                          self._component.artifact.url,
-                         Component_Data_URL.ARTIFACTS.value))
+                         Component_Data_URL.ARTIFACTS.value), exist_ok=True)
         # Cycle类型的组件，现在已经可以运行了
         pipeline_utils.change_components_phase_to_running(
             self._pipeline_id, self._component.id)
@@ -288,7 +372,7 @@ class BaseDriver(abc.ABC):
         channel_types = self._component._channel
         if self._runtype == BaseDriverRunType.DO.value:
 
-            channel_result = self.execute(Do_Channels, Do_Artifacts)  # 获得运行的结果
+            channel_result = self.execute(Do_Channels, Artifacts)  # 获得运行的结果
             # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
             validated_channels = self.data_type_validate(
                 types_dict=channel_types, data=channel_result)
@@ -304,15 +388,15 @@ class BaseDriver(abc.ABC):
             self._executor.pre_execute()
             # 然后再根据组件是否有cycle类型的上游组件来进行后面的操作
             # 如果是没有cycle上游组件，则认为他是信号源，需要不断的执行，并向后发送消息
-            # 如果有，则认为他是由前面
+            # 如果有，则认为他是由前面cycle组件驱动的
 
             if len(self._d_channels) == len(
                     self._component._upstreamComponents):
-                logger.logger.info('该组件是信号源')
+                logger.logger.info('该组件是信号源')  # 即没有cycle类型的上游组件
                 # 就直接循环执行
                 while True:
                     channel_result = self.execute(Do_Channels,
-                                                  Do_Artifacts)  # 获得运行的结果
+                                                  Artifacts)  # 获得运行的结果
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
@@ -328,6 +412,24 @@ class BaseDriver(abc.ABC):
                 # step 3 ：启动http服务器
                 self.start_server()
                 logger.logger.info('启动server后继续执行')
+                while True:
+                    # 不断地获取消息
+                    Cycle_Channels = self.get_upstream_component_Cycle_type_result()
+                    if Cycle_Channels is None:
+                        # 如果消息为None，则直接跳过
+                        logger.logger.info('暂时没有上游的消息，跳过执行')
+                        time.sleep(2)
+                        continue
+                    channel_result = self.execute({**Do_Channels, **Cycle_Channels},
+                                                  Artifacts)  # 获得运行的结果
+                    # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
+                    validated_channels = self.data_type_validate(
+                        types_dict=channel_types, data=channel_result)
+                    # 将state保存
+                    self._component.state.dump()
+                    # 将结果发送给后续cycle节点(如果有的话)
+                    self.send_channels(validated_channels)
+                    time.sleep(5)
 
     def clear_component_data(self, component_dir: str):
         """删除组件的数据
@@ -346,7 +448,10 @@ class BaseDriver(abc.ABC):
 
         """
         logger.logger.warning('清空文件夹{}'.format(component_dir))
-        shutil.rmtree(component_dir)
+        try:
+            shutil.rmtree(component_dir)
+        except FileNotFoundError:
+            logger.logger.warning('组件{}的目录已经不存在'.format(self._component.id))
         os.makedirs(component_dir, exist_ok=True)
 
     def restore_state(self, component_dir: str):
@@ -365,16 +470,31 @@ class BaseDriver(abc.ABC):
         """获取上游组件中Do类型的结果与目录
         """
         Do_Channels = {}
-        Do_Artifacts = {}
-        for upstream_component in self._component._upstreamComponents:
+        Artifacts = {}
+        for upstream_component in self._d_artifact:
             # 先看看Do_Channels Do_Artifacts与_upstreamComponents对应的组件
-            key = upstream_component
-            jsonfile = self._d_channels[key]
-            Do_Channels[key] = Channels(data=json.load(
-                open(os.path.join(global_config.OUTPUTSDIR, jsonfile), 'r')))
-            Do_Artifacts[key] = Artifact(url=os.path.join(
-                global_config.OUTPUTSDIR, self._d_artifact[key]))
-        return Do_Channels, Do_Artifacts
+            if upstream_component in self._d_channels:
+                jsonfile = self._d_channels[upstream_component]
+                Do_Channels[upstream_component] = Channels(data=json.load(
+                    open(os.path.join(global_config.OUTPUTSDIR, jsonfile), 'r')))
+            Artifacts[upstream_component] = Artifact(url=os.path.join(
+                global_config.OUTPUTSDIR, self._d_artifact[upstream_component]))
+        return Do_Channels, Artifacts
+
+    def get_upstream_component_Cycle_type_result(self):
+        """获取上游组件中Cycle类型的结果与目录
+        """
+        Cycle_Channels = {}
+        msgs = self.pop_all_msg()
+        if not any(msgs.values()):
+            logger.logger.info('Cycle_Channels没有消息')
+            Cycle_Channels = None
+        else:
+            for cycleid, msg in msgs.items():
+                if msg:
+                    msg.pop('timestamp')
+                Cycle_Channels[cycleid] = Channels(data=msg)
+        return Cycle_Channels
 
     def run(self, uni_op_mudule: str):
         '''需要根据框架定义具体的执行逻辑
@@ -407,10 +527,16 @@ class BaseDriver(abc.ABC):
         -------
 
         '''
+        pipeline_utils.create_pipeline_dir(os.path.join(
+            global_config.OUTPUTSDIR,
+            self._pipeline_root[0],
+            self._pipeline_root[1]
+        ))
         # 将pipeline的状态更新只running
         pipeline_utils.change_pipeline_phase_to_running(self._pipeline_id)
         self._uniop = importlib.import_module(uni_op_mudule)
         self.get_ip_by_label_func = getattr(self._uniop, 'get_ip_port_by_label')
+
         # self._uniop=__import__(uni_op_mudule)
         if type(self._component) == global_component.GlobalComponent:
             # step 1
