@@ -155,26 +155,7 @@ class BaseDriver(abc.ABC):
         -------
 
         """
-        # 如果是共享组件，则会建立软链接目录
-        if not os.path.exists(
-                os.path.join(global_config.OUTPUTSDIR, self._pipeline_root[0],
-                             self._component._alias_model_name,
-                             self._component._alias_component_id)):
-            logger.logger.error('全局组件{}的依赖目录不存在'.format(self._component.id))
-            raise exception.FileNotFoundError()
-        try:
-            os.symlink(src=os.path.join(os.getcwd(),
-                                        global_config.OUTPUTSDIR,
-                                        self._pipeline_root[0],
-                                        self._component._alias_model_name,
-                                        self._component._alias_component_id),
-                       dst=os.path.join(os.getcwd(),
-                                        global_config.OUTPUTSDIR,
-                                        self._pipeline_root[0],
-                                        self._pipeline_root[1],
-                                        self._component.id))
-        except FileExistsError:
-            logger.logger.warning('全局组件{}的软链接目录已经存在'.format(self._component.id))
+
         if self._runtype == BaseDriverRunType.DO.value:
             while True:
                 phase = pipeline_utils.db_get_pipeline_component_phase(
@@ -229,6 +210,26 @@ class BaseDriver(abc.ABC):
                         self._component._alias_component_id
                     ))
                 time.sleep(2)
+        # 如果是共享组件，则会建立软链接目录
+        if not os.path.exists(
+                os.path.join(global_config.OUTPUTSDIR, self._pipeline_root[0],
+                             self._component._alias_model_name,
+                             self._component._alias_component_id)):
+            logger.logger.error('全局组件{}的依赖目录不存在'.format(self._component.id))
+            raise exception.FileNotFoundError()
+        try:
+            os.symlink(src=os.path.join(os.getcwd(),
+                                        global_config.OUTPUTSDIR,
+                                        self._pipeline_root[0],
+                                        self._component._alias_model_name,
+                                        self._component._alias_component_id),
+                       dst=os.path.join(os.getcwd(),
+                                        global_config.OUTPUTSDIR,
+                                        self._pipeline_root[0],
+                                        self._pipeline_root[1],
+                                        self._component.id))
+        except FileExistsError:
+            logger.logger.warning('全局组件{}的软链接目录已经存在'.format(self._component.id))
 
     def pre_execute_cycle(self):
         """在cycle类型组件开始执行cycle之前的pre execute
