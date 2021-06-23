@@ -165,13 +165,14 @@ class Pipeline():
                 raise RuntimeError('重复的id： %s ,其class type为%s' %
                                    (component.id, component.type))
             node_ids.add(component.id)
-
-        for component in deduped_components:
+            # 对component的deploytype继续填充，因为组件没有这一步骤，GlobalComponent类型的组件需要找到他的别名组件
+            self.fill_c_deploytype_field(component)
             # 遍历组件的依赖组件
             for dependency_c in component.inputs:
                 component.add_upstream_Components(dependency_c)  # 添加上游组件
                 dependency_c.add_downstream_Components(component)  # 添加下游组件
 
+            
         self._layersComponents = topsorted_layers(
             list(deduped_components),
             get_node_id_fn=lambda c: c.id,
@@ -188,9 +189,10 @@ class Pipeline():
             logger.info('第 %d 层' % index)
             for component in layer:
                 logger.info('component id %s' % component.id)
-                # 对component的deploytype继续填充，因为组件没有这一步骤，GlobalComponent类型的组件需要找到他的别名组件
-                self.fill_c_deploytype_field(component)
-
+               
+                # 同时利用cache机制，判断是否可以利用之前的数据
+                pipeline_utils.compare_component(self._task_name, self._model_name,
+                                             component)
                 if component.deploytype is None:
                     raise exception.DeployTypeError(
                         'component {}必须有一种deploytype'.format(component.id))
@@ -220,34 +222,34 @@ class Pipeline():
                 self.id, component.id, component.alias_model_name,
                 component.alias_component_id))
             assert component.id == component.alias_component_id, "为避免后续组件接收id重复问题，global component的id要与alias一致"
-            # # GlobalComponent不应具有上游组件
-            # if len(component.dependentComponent) > 0:
-            #     logger.error('GlobalComponent 不应具有上游组件')
-            #     raise RuntimeError()
-            # if not pipeline_utils.db_check_pipeline(
-            #         self._task_name, component.alias_model_name):
-            #     # 检查同一task下的model是否存在
-            #     logger.error('pipeline id :{}不存在 '.format(pipeline_utils.generate_pipeline_id(
-            #         task_name=self._task_name, model_name=component.alias_model_name)))
-            #     raise exception.PipelineNotFoundError()
-            # if not pipeline_utils.db_check_pipeline_component(
-            #         self._task_name, component.alias_model_name,
-            #         component.alias_component_id):
-            #     # 再检查别名的组件是否存在
-            #     logger.error('pipeline id :{}不存在 组件：{}'.format(
-            #         '_'.join([self._task_name, component.alias_model_name]),
-            #         component.alias_component_id))
-            #     raise exception.ComponentNotFoundError()
-            # # 然后再根据别名组件,得到他的deploytype
-            # component.deploytype = pipeline_utils.db_get_pipeline_component_deploytype(
-            #     self._task_name, component.alias_model_name,
-            #     component.alias_component_id)
-            # # 更新一下alias的组件，可能存在较长alias链，这时需要找到最初的那个
-            # origin_model, origin_component = pipeline_utils.recursive_get_global_component_alias_component(
-            #     self._task_name, self._model_name, component)
-            # component.alias_component_id = origin_component
-            # component.alias_model_name = origin_model
-            component.deploytype='Cycle'
+            # GlobalComponent不应具有上游组件
+            if len(component.dependentComponent) > 0:
+                logger.error('GlobalComponent 不应具有上游组件')
+                raise RuntimeError()
+            if not pipeline_utils.db_check_pipeline(
+                    self._task_name, component.alias_model_name):
+                # 检查同一task下的model是否存在
+                logger.error('pipeline id :{}不存在 '.format(pipeline_utils.generate_pipeline_id(
+                    task_name=self._task_name, model_name=component.alias_model_name)))
+                raise exception.PipelineNotFoundError()
+            if not pipeline_utils.db_check_pipeline_component(
+                    self._task_name, component.alias_model_name,
+                    component.alias_component_id):
+                # 再检查别名的组件是否存在
+                logger.error('pipeline id :{}不存在 组件：{}'.format(
+                    '_'.join([self._task_name, component.alias_model_name]),
+                    component.alias_component_id))
+                raise exception.ComponentNotFoundError()
+            # 然后再根据别名组件,得到他的deploytype
+            component.deploytype = pipeline_utils.db_get_pipeline_component_deploytype(
+                self._task_name, component.alias_model_name,
+                component.alias_component_id)
+            # 更新一下alias的组件，可能存在较长alias链，这时需要找到最初的那个
+            origin_model, origin_component = pipeline_utils.recursive_get_global_component_alias_component(
+                self._task_name, self._model_name, component)
+            component.alias_component_id = origin_component
+            component.alias_model_name = origin_model
+            #component.deploytype='Cycle'
         else:
             # 说明是普通的组件，直接通过executor class的信息判断
             if (bool(component._executor_cls.Do == BaseExecutor.Do) == bool(
@@ -257,9 +259,7 @@ class Pipeline():
                 component.deploytype = 'Do'
             else:
                 component.deploytype = 'Cycle'
-            # 同时利用cache机制，判断是否可以利用之前的数据
-            pipeline_utils.compare_component(self._task_name, self._model_name,
-                                             component)
+            
 
     def allocate_component_artifact_url(self):
         '''给pipeline每个组件分配artifact的存储目录

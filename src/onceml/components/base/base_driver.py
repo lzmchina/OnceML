@@ -30,22 +30,54 @@ import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
 import onceml.utils.time as time_utils
 import onceml.types.phases as phases
 
+import onceml.utils.py_module_utils as py_module_utils
+
 
 class BaseDriverRunType(Enum):
     DO = 'Do'
     CYCLE = 'Cycle'
 
 
-def generate_handler(driver_instance):
+class BaseDriverApiType(Enum):
+    GET = 'get'
+    POST = 'post'
+    PUT = 'put'
+    DELETE = 'delete'
 
+
+def generate_handler(driver_instance):
     class BaseHandler(BaseHTTPRequestHandler):
         default_request_version = "HTTP/1.1"
 
-        def __init__(self,  *args, **kwargs) -> None:
+        def generate_api(self, _executor: base_executor.BaseExecutor):
+            '''当_driver_instance里面有一些符合约定的函数名时，可以作为路由规则
+
+            post_***/POST_***……
+
+            第一个下划线当作分割符号，后面的下划线会转换成/符号
+
+            例如：
+
+            Post_test_data:会被解析为/test/data的post请求
+
+            GET_get_name:会被解析为/get/name的get请求
+            '''
+            for api_type in [e.value for e in BaseDriverApiType]:
+                self._route[api_type] = {}
+                func_names = py_module_utils.get_func_list_prefix(
+                    _executor, api_type)
+                for func in func_names:
+                    self._route[api_type][py_module_utils.parse_route(
+                        func.split('_', maxsplit=1)[1])] = getattr(
+                            _driver_instance._executor, func)
+
+        def __init__(self, *args, **kwargs) -> None:
             self._driver_instance: BaseDriver = driver_instance
+            self._route = {}
+            self.generate_api(self._driver_instance._executor)
             super(BaseHandler, self).__init__(*args, **kwargs)
 
-        def _set_response(self):
+        def _set_html_response(self):
             self.send_response(200)
             self.send_header('Content-type', 'text/html')
             self.end_headers()
@@ -67,34 +99,81 @@ def generate_handler(driver_instance):
             '''用来充当server的get处理
             '''
 
-            print(self.path)
-
+            #print(self.path)
+            logger.logger.debug(self.path)
             #message = "Hello, World! Here is a GET response"
             #self.wfile.write(bytes(message, "utf8"))
-            self._set_response()
-            self.wfile.write("Hello, World! Here is a GET response".encode('utf-8'))
+            if self._route[BaseDriverApiType.GET.value].get(self.path,
+                                                            None):  #路由匹配
+                self._route[BaseDriverApiType.GET.value].get(self.path)(
+                    self)  #执行相应的控制逻辑
+            elif self.path == '/':
+                #匹配/，执行默认流程,用于通信
+                self._set_html_response()
+                self.wfile.write(
+                    "Hello, World! Here is a GET response".encode('utf-8'))
+            else:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
 
         def do_POST(self):
             '''用来充当server的post处理
             '''
+            if self._route[BaseDriverApiType.POST.value].get(self.path,
+                                                             None):  #路由匹配
+                self._route[BaseDriverApiType.POST.value].get(self.path)(
+                    self)  #执行相应的控制逻辑
+            elif self.path == '/':
+                #匹配/，执行默认流程,用于通信
+                #method1 获取post提交的数据
+                # datas = self.rfile.read(int(self.headers['content-length']))
+                # datas = urllib.unquote(datas).decode("utf-8", 'ignore')
 
-            # 获取post提交的数据
-            # datas = self.rfile.read(int(self.headers['content-length']))
-            # datas = urllib.unquote(datas).decode("utf-8", 'ignore')
-            # <--- Gets the size of data
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length).decode(
-                'utf-8')  # <--- Gets the data itself
-            self.add_msg_to_queue(post_data)
-            self._set_json_response()
-            self.wfile.write(json.dumps({'a': 1}).encode('utf-8'))
+                #method2 <--- Gets the size of data
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode(
+                    'utf-8')  # <--- Gets the data itself
+                self.add_msg_to_queue(post_data)
+                self._set_json_response()
+                self.wfile.write(json.dumps({'a': 1}).encode('utf-8'))
+            else:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+
+        def do_PUT(self):
+            '''用来充当server的put处理
+            '''
+            logger.logger.debug(self.path)
+            if self._route[BaseDriverApiType.PUT.value].get(self.path,
+                                                            None):  #路由匹配
+                self._route[BaseDriverApiType.PUT.value].get(self.path)(
+                    self)  #执行相应的控制逻辑
+            elif self.path == '/':
+                #匹配/，执行默认流程,用于通信
+                #method1 获取post提交的数据
+                # datas = self.rfile.read(int(self.headers['content-length']))
+                # datas = urllib.unquote(datas).decode("utf-8", 'ignore')
+
+                #method2 <--- Gets the size of data
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length).decode(
+                    'utf-8')  # <--- Gets the data itself
+                logger.logger.debug('默认put接收数据：{}'.format(post_data))
+                self._set_html_response()
+            else:
+                self.send_response(404)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+
     return BaseHandler
 
 
 class BaseDriver(abc.ABC):
     def __init__(self, component: base_component.BaseComponent,
                  pipeline_root: List[str], d_channels: Dict[str, str],
-                 d_artifact: Dict[str, str]) -> None:
+                 d_artifact: Dict[str, str], project: str, **args) -> None:
         """基础类，在每个编排系统里具体执行的逻辑
         description
         ---------
@@ -108,6 +187,8 @@ class BaseDriver(abc.ABC):
         d_channels: 所依赖的Do类型的结果的json文件路径
 
         d_artifact：所依赖的组件的数据路径
+
+        project：代码目录名
 
         Returns
         -------
@@ -128,7 +209,7 @@ class BaseDriver(abc.ABC):
         self._pipeline_id = '.'.join(pipeline_root)
         self._d_channels = d_channels
         self._d_artifact = d_artifact
-
+        self._project = project
         self._executor = self._component._executor_cls()
         if self._runtype == BaseDriverRunType.DO.value:
             self._executor_func = self._executor.Do
@@ -161,54 +242,56 @@ class BaseDriver(abc.ABC):
                 phase = pipeline_utils.db_get_pipeline_component_phase(
                     task_name=self._pipeline_root[0],
                     model_name=self._component._alias_model_name,
-                    component=self._component
-                )
+                    component=self._component)
                 if phase == phases.Component_PHASES.FINISHED.value:
-                    logger.logger.info('组件{}:{} alias的组件{}:{}已经finished，可以退出进程'.format(
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._pipeline_root[1]),
-                        self._component.id,
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._component._alias_model_name),
-                        self._component._alias_component_id
-                    ))
+                    logger.logger.info(
+                        '组件{}:{} alias的组件{}:{}已经finished，可以退出进程'.format(
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._pipeline_root[1]), self._component.id,
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._component._alias_model_name),
+                            self._component._alias_component_id))
                     break
                 else:
-                    logger.logger.info('组件{}:{} alias的组件{}:{}没有finished，继续监听'.format(
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._pipeline_root[1]),
-                        self._component.id,
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._component._alias_model_name),
-                        self._component._alias_component_id
-                    ))
+                    logger.logger.info(
+                        '组件{}:{} alias的组件{}:{}没有finished，继续监听'.format(
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._pipeline_root[1]), self._component.id,
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._component._alias_model_name),
+                            self._component._alias_component_id))
                 time.sleep(2)
         else:
             while True:
                 phase = pipeline_utils.db_get_pipeline_component_phase(
                     task_name=self._pipeline_root[0],
                     model_name=self._component._alias_model_name,
-                    component=self._component.id
-                )
+                    component=self._component.id)
                 if phase == phases.Component_PHASES.RUNNING.value:
-                    logger.logger.info('组件{}:{} alias的组件{}:{}正在running，可以退出进程'.format(
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._pipeline_root[1]),
-                        self._component.id,
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._component._alias_model_name),
-                        self._component._alias_component_id
-                    ))
+                    logger.logger.info(
+                        '组件{}:{} alias的组件{}:{}正在running，可以退出进程'.format(
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._pipeline_root[1]), self._component.id,
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._component._alias_model_name),
+                            self._component._alias_component_id))
                     break
                 else:
-                    logger.logger.info('组件{}:{} alias的组件{}:{}没有running，继续监听'.format(
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._pipeline_root[1]),
-                        self._component.id,
-                        pipeline_utils.generate_pipeline_id(
-                            self._pipeline_root[0], self._component._alias_model_name),
-                        self._component._alias_component_id
-                    ))
+                    logger.logger.info(
+                        '组件{}:{} alias的组件{}:{}没有running，继续监听'.format(
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._pipeline_root[1]), self._component.id,
+                            pipeline_utils.generate_pipeline_id(
+                                self._pipeline_root[0],
+                                self._component._alias_model_name),
+                            self._component._alias_component_id))
                 time.sleep(2)
         # 如果是共享组件，则会建立软链接目录
         if not os.path.exists(
@@ -218,18 +301,17 @@ class BaseDriver(abc.ABC):
             logger.logger.error('全局组件{}的依赖目录不存在'.format(self._component.id))
             raise exception.FileNotFoundError()
         try:
-            os.symlink(src=os.path.join(os.getcwd(),
-                                        global_config.OUTPUTSDIR,
+            os.symlink(src=os.path.join(os.getcwd(), global_config.OUTPUTSDIR,
                                         self._pipeline_root[0],
                                         self._component._alias_model_name,
                                         self._component._alias_component_id),
-                       dst=os.path.join(os.getcwd(),
-                                        global_config.OUTPUTSDIR,
+                       dst=os.path.join(os.getcwd(), global_config.OUTPUTSDIR,
                                         self._pipeline_root[0],
                                         self._pipeline_root[1],
                                         self._component.id))
         except FileExistsError:
-            logger.logger.warning('全局组件{}的软链接目录已经存在'.format(self._component.id))
+            logger.logger.warning('全局组件{}的软链接目录已经存在'.format(
+                self._component.id))
 
     def pre_execute_cycle(self):
         """在cycle类型组件开始执行cycle之前的pre execute
@@ -265,8 +347,9 @@ class BaseDriver(abc.ABC):
         if self._upstream_msg_queue[key] is None:
             self._upstream_msg_queue[key] = msg_dict
         else:
-            self._upstream_msg_queue[key] = msg_dict if msg_dict['timestamp'] > self._upstream_msg_queue[
-                key]['timestamp'] else self._upstream_msg_queue[key]
+            self._upstream_msg_queue[key] = msg_dict if msg_dict[
+                'timestamp'] > self._upstream_msg_queue[key][
+                    'timestamp'] else self._upstream_msg_queue[key]
         self._upstream_msg_queue_lock.release()
         # self.show_queue()
 
@@ -316,28 +399,30 @@ class BaseDriver(abc.ABC):
         '''
         def err_handler(request, exception):
             logger.logger.error("请求出错")
+
         # try:
-        host_list = self.get_ip_by_label_func(task_name=self._pipeline_root[0],
-                                              model_name=self._pipeline_root[1],
-                                              component_id=self._component.id)
+        host_list = self.get_ip_by_label_func(
+            project=self._project,
+            task_name=self._pipeline_root[0],
+            model_name=self._pipeline_root[1],
+            component_id=self._component.id)
         logger.logger.info('host_list: {}'.format(host_list))
         # 开始并发式的发送消息
-        req_list = [
+        req_list = (
             grequests.post(
-                '{ip}:{port}'.format(
-                    ip=host[0],
-                    port=host[1]
-                    # ip='http://httpbin.org/delay/5'
-                ),
-                data={
+                'http://{ip}:{port}'.format(ip=host[0],
+                                     port=host[1]
+                                     # ip='http://httpbin.org/delay/5'
+                                     ),
+                data=json.dumps({
                     'component': self._component.id,  # 标志一下是哪个component发的
-                    'timestamp': time_utils.get_timestamp(),  # 写一下数据产生的时间，接收方只需要保存最新的即可，防止两边速度不一致
+                    'timestamp': time_utils.get_timestamp(
+                    ),  # 写一下数据产生的时间，接收方只需要保存最新的即可，防止两边速度不一致
                     **validated_channels
-
-                },
+                }),
                 timeout=3)  # 3秒的timeout
             for host in host_list
-        ]
+        )
         res_list = grequests.map(req_list, exception_handler=err_handler)
         logger.logger.info(res_list)
         # except:
@@ -359,13 +444,12 @@ class BaseDriver(abc.ABC):
 
         """
         # 先获取上游节点中的Do类型的结果，因为这些都是已经确定的
-        Do_Channels, Artifacts = self.get_upstream_component_Do_type_result(
-        )
+        Do_Channels, Artifacts = self.get_upstream_component_Do_type_result()
         # 确保arifact目录存在
-        os.makedirs(
-            os.path.join(global_config.OUTPUTSDIR,
-                         self._component.artifact.url,
-                         Component_Data_URL.ARTIFACTS.value), exist_ok=True)
+        os.makedirs(os.path.join(global_config.OUTPUTSDIR,
+                                 self._component.artifact.url,
+                                 Component_Data_URL.ARTIFACTS.value),
+                    exist_ok=True)
         # Cycle类型的组件，现在已经可以运行了
         pipeline_utils.change_components_phase_to_running(
             self._pipeline_id, self._component.id)
@@ -415,14 +499,18 @@ class BaseDriver(abc.ABC):
                 logger.logger.info('启动server后继续执行')
                 while True:
                     # 不断地获取消息
-                    Cycle_Channels = self.get_upstream_component_Cycle_type_result()
+                    Cycle_Channels = self.get_upstream_component_Cycle_type_result(
+                    )
                     if Cycle_Channels is None:
                         # 如果消息为None，则直接跳过
                         logger.logger.info('暂时没有上游的消息，跳过执行')
                         time.sleep(2)
                         continue
-                    channel_result = self.execute({**Do_Channels, **Cycle_Channels},
-                                                  Artifacts)  # 获得运行的结果
+                    channel_result = self.execute(
+                        {
+                            **Do_Channels,
+                            **Cycle_Channels
+                        }, Artifacts)  # 获得运行的结果
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
@@ -477,9 +565,11 @@ class BaseDriver(abc.ABC):
             if upstream_component in self._d_channels:
                 jsonfile = self._d_channels[upstream_component]
                 Do_Channels[upstream_component] = Channels(data=json.load(
-                    open(os.path.join(global_config.OUTPUTSDIR, jsonfile), 'r')))
-            Artifacts[upstream_component] = Artifact(url=os.path.join(
-                global_config.OUTPUTSDIR, self._d_artifact[upstream_component]))
+                    open(os.path.join(global_config.OUTPUTSDIR, jsonfile),
+                         'r')))
+            Artifacts[upstream_component] = Artifact(
+                url=os.path.join(global_config.OUTPUTSDIR,
+                                 self._d_artifact[upstream_component]))
         return Do_Channels, Artifacts
 
     def get_upstream_component_Cycle_type_result(self):
@@ -528,15 +618,14 @@ class BaseDriver(abc.ABC):
         -------
 
         '''
-        pipeline_utils.create_pipeline_dir(os.path.join(
-            global_config.OUTPUTSDIR,
-            self._pipeline_root[0],
-            self._pipeline_root[1]
-        ))
+        pipeline_utils.create_pipeline_dir(
+            os.path.join(global_config.OUTPUTSDIR, self._pipeline_root[0],
+                         self._pipeline_root[1]))
         # 将pipeline的状态更新只running
         pipeline_utils.change_pipeline_phase_to_running(self._pipeline_id)
         self._uniop = importlib.import_module(uni_op_mudule)
-        self.get_ip_by_label_func = getattr(self._uniop, 'get_ip_port_by_label')
+        self.get_ip_by_label_func = getattr(self._uniop,
+                                            'get_ip_port_by_label')
 
         # self._uniop=__import__(uni_op_mudule)
         if type(self._component) == global_component.GlobalComponent:

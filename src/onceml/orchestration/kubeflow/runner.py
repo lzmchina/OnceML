@@ -21,7 +21,8 @@ class KubeflowRunner(BaseRunner):
     def __init__(self,
                  output_dir: str = None,
                  kfp_host: str = None,
-                 nfc_host: str = None):
+                 nfc_host: str = None,
+                 docker_image: str = None):
         """负责将一个pipeline转换成kubeflow workflow资源
         description
         ---------
@@ -42,6 +43,8 @@ class KubeflowRunner(BaseRunner):
 
         nfc_host：NFC服务器的ip，默认为当前机器的ip
 
+        docker_image:kfp里面的pod使用的镜像
+
         Returns
         -------
 
@@ -51,12 +54,12 @@ class KubeflowRunner(BaseRunner):
         """
 
         self._compiler = compiler.Compiler()
-        kfp_host = kfp_host or k8s_ops.get_kfp_host(
-            kfp_config.SVCNAME, namespace=kfp_config.NAMESPACE)
-        self._kfp_client = kfp.Client(kfp_host)
+        self._kfp_client = kfp.Client(kfp_host or k8s_ops.get_kfp_host(
+            kfp_config.SVCNAME, namespace=kfp_config.NAMESPACE))
         self._parameters = {}
         self.kfp_parameters = []
         self._output_dir = output_dir or kfp_config.KFPOUTPUT
+        self.docker_image = docker_image
         os.makedirs(os.path.join(self._output_dir, 'yamls'), exist_ok=True)
 
         # 在kfp中创建onceml专属的pv
@@ -102,7 +105,8 @@ class KubeflowRunner(BaseRunner):
                 pipeline_root=pipeline.rootdir,
                 component=component,
                 depends_on=depends_on,
-                Do_deploytype=Do_deploytype)
+                Do_deploytype=Do_deploytype,
+                docker_image=self.docker_image)
             component_to_kfp_op[component.id] = kfp_component.container_op
 
     def allocate_component_artifact_url(self, pipeline: Pipeline):

@@ -88,7 +88,7 @@ def test_container_entrypoint_receiver():
 
 
 if __name__ == "__main__":
-    #test_container_entrypoint()
-    test_container_entrypoint_receiver()
+    test_container_entrypoint()
+    #test_container_entrypoint_receiver()
 
 

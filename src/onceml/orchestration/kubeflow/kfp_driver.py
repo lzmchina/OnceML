@@ -4,10 +4,8 @@ import onceml.components.base.base_component as base_component
 
 
 class kfp_driver(base_driver.BaseDriver):
-    def __init__(self, component: base_component.BaseComponent,
-                 pipeline_root: List[str], d_channels: Dict[str, str],
-                 d_artifact: Dict[str, str]) -> None:
-        super().__init__(component, pipeline_root, d_channels, d_artifact)
+    def __init__(self,**args) -> None:
+        super().__init__(**args)
 
     def run(self):
         """kfp组件的driver执行

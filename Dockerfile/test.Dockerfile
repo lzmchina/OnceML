@@ -1,4 +1,4 @@
-FROM python:3.8
+FROM liziming/onceml-pip:latest
 COPY . /onceml/
 WORKDIR /onceml/
 # RUN apt install python3

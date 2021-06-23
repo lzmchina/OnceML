@@ -42,10 +42,14 @@ class KfpComponent:
 
     将pipeline的组件转化至kfpComponent，包含执行的命令、使用的镜像、挂载的pv等信息
     '''
-    def __init__(self, task_name: str, model_name: str, pipeline_root: str,
+    def __init__(self,
+                 task_name: str,
+                 model_name: str,
+                 pipeline_root: str,
                  component: base_component.BaseComponent,
-                 depends_on: Dict[str,
-                                  dsl.ContainerOp], Do_deploytype: List[str]):
+                 depends_on: Dict[str, dsl.ContainerOp],
+                 Do_deploytype: List[str],
+                 docker_image: str = None):
         """kubeflow component的表示
         description
         ---------
@@ -73,7 +77,9 @@ class KfpComponent:
 
         """
         arguments = [
-            '--pipeline_root', [task_name, model_name],
+            '--project',global_config.PROJECTDIRNAME,
+            '--pipeline_root',
+            json_utils.simpleDumps([task_name, model_name]),
             '--serialized_component',
             json_utils.componentDumps(component)
         ]
@@ -81,15 +87,21 @@ class KfpComponent:
         d_artifact = {}  # 获取依赖的组件的artifact输出路径
         for c in component.upstreamComponents:
             if c.id in Do_deploytype:
-                d_channels[c.id] = os.path.join(c.artifact.url,component_msg.Component_Data_URL.CHANNELS.value)
-            d_artifact[c.id] =  os.path.join(c.artifact.url,component_msg.Component_Data_URL.ARTIFACTS.value)
+                d_channels[c.id] = os.path.join(
+                    c.artifact.url,
+                    component_msg.Component_Data_URL.CHANNELS.value)
+            d_artifact[c.id] = os.path.join(
+                c.artifact.url,
+                component_msg.Component_Data_URL.ARTIFACTS.value)
         arguments = arguments + [
-            '--d_channels', d_channels, '--d_artifact', d_artifact
+            '--d_channels',
+            json_utils.simpleDumps(d_channels), '--d_artifact',
+            json_utils.simpleDumps(d_artifact)
         ]
         self.container_op = dsl.ContainerOp(
                 name=component.id,
                 command=kfp_config.COMMAND,
-                image=kfp_config.IMAGE,
+                image=docker_image or kfp_config.IMAGE,
                 arguments=arguments,
                 file_outputs={  # 存放组件的channels结果的文件，方便ui可视化
                     'mlpipeline-ui-metadata':
@@ -109,10 +121,13 @@ class KfpComponent:
                     ]
                 })
         if component.deploytype == 'Cycle':
-            #如果是Cycle，则需要增加port配置
-            self.container_op.container.add_port(
-                V1ContainerPort(container_port=kfp_config.SERVERPORT)  # 开放端口
-            )
+            #如果是Cycle，且不是global组件，则需要增加port配置
+            #因为global组件相当于他别名的组件的替身，可以看作是他别名的组件要向后继组件发送消息
+            if type(component) != global_component.GlobalComponent:
+                self.container_op.container.add_port(
+                    V1ContainerPort(
+                        container_port=kfp_config.SERVERPORT)  # 开放端口
+                )
 
             # 设置一个init container，用来检查依赖的Cycle类型的组件server是否已经完成
             # self.container_op.add_init_container(dsl.UserContainer(
@@ -120,23 +135,25 @@ class KfpComponent:
             #     image='',
             # ))
 
-            # 设置pod的label，保证Cycle类型的组件能够知道自己要向谁报告通信
+            # 设置pod的label，保证Cycle类型的组件能够打上上游cycle组件的标签，这样上游组件就可以通过label来获取要发送
+            # 的组件的list
             for c in component.upstreamComponents:
                 _model_name, _com_id = model_name, c.id
                 # 如果是全局组件，并且是Cycle类型的，就要打上全局组件别名的组件的标签
-                if type(
-                        c
-                ) == global_component.GlobalComponent and c.deploytype == 'Cycle':
-                    _model_name, _com_id = pipeline_utils.get_global_component_alias_component(
-                        task_name=task_name,
-                        model_name=model_name,
-                        component=c)
-                self.container_op.add_pod_label(
-                    name=kfp_config.COMPONENT_SENDER_POD_LABEL.format(
-                        task=task_name,
-                        model_name=_model_name,
-                        component=_com_id),
-                    value=kfp_config.COMPONENT_SENDER_POD_VALUE)
+                # 在前面pipeline给组件分配deploytype时，会更新global依赖的最原始的实际运行的组件
+                if c.deploytype == 'Cycle':
+                    if type(c) == global_component.GlobalComponent:
+                        _model_name, _com_id = pipeline_utils.get_global_component_alias_component(
+                            task_name=task_name,
+                            model_name=model_name,
+                            component=c)
+                    self.container_op.add_pod_label(
+                        name=kfp_config.COMPONENT_SENDER_POD_LABEL.format(
+                            project=global_config.PROJECTDIRNAME,
+                            task=task_name,
+                            model=_model_name,
+                            component=_com_id),
+                        value=kfp_config.COMPONENT_SENDER_POD_VALUE)
         # 设置本组件要在Do类型组件完成之后启动
         for c_id, v in depends_on.items():
             if c_id in Do_deploytype:

@@ -82,10 +82,10 @@ def get_current_node_host():
 
 
 def get_current_node_name():
-    '''获取当前节点在局域网的host
+    '''获取当前节点的hostname
     '''
     # 获取本机电脑名
-    return socket.getfqdn(socket.gethostname())
+    return socket.gethostname()
 
 
 def apply_nfs_server(NFS_NAME: str, labels: dict):
