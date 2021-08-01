@@ -411,9 +411,9 @@ class BaseDriver(abc.ABC):
         req_list = (
             grequests.post(
                 'http://{ip}:{port}'.format(ip=host[0],
-                                     port=host[1]
-                                     # ip='http://httpbin.org/delay/5'
-                                     ),
+                                            port=host[1]
+                                            # ip='http://httpbin.org/delay/5'
+                                            ),
                 data=json.dumps({
                     'component': self._component.id,  # 标志一下是哪个component发的
                     'timestamp': time_utils.get_timestamp(
@@ -421,8 +421,7 @@ class BaseDriver(abc.ABC):
                     **validated_channels
                 }),
                 timeout=3)  # 3秒的timeout
-            for host in host_list
-        )
+            for host in host_list)
         res_list = grequests.map(req_list, exception_handler=err_handler)
         logger.logger.info(res_list)
         # except:
@@ -470,7 +469,9 @@ class BaseDriver(abc.ABC):
                 self._pipeline_id, self._component.id)
         else:
             # 首先用户自定义的pre_execute逻辑
-            self._executor.pre_execute()
+            self._executor.pre_execute(self._component.state)
+            # 将state保存
+            self._component.state.dump()
             # 然后再根据组件是否有cycle类型的上游组件来进行后面的操作
             # 如果是没有cycle上游组件，则认为他是信号源，需要不断的执行，并向后发送消息
             # 如果有，则认为他是由前面cycle组件驱动的

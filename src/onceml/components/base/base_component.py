@@ -46,7 +46,7 @@ class BaseComponent(Jsonable):
 
         instance_name (str): 给组件取一个名字，会作为id属性（如果未指定，则由系统分配）
 
-        shared(bool):是否会共享组件的数据
+        shared(bool):是否会共享组件的数据 (todo)
 
         args :自行定义各种参数，component会检查每个参数的type，如果是OutputChannel，就是组件Channel的一个属性，其他则认为是params，返回给组件运行时使用
 

@@ -60,7 +60,7 @@ class BaseExecutor:
         """
 
         pass
-    def pre_execute(self):
+    def pre_execute(self,state:State):
         """供Cycle类型组件使用，因为Cycle组件会循环执行Cycle函数，有一些全局变量只需要初始化一次即可
         """
         pass
