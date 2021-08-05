@@ -20,3 +20,5 @@ class FileNotFoundError(Exception):
 
 class NFCNotFoundError(Exception):
     pass
+class TypeNotAllowedError(Exception):
+    pass

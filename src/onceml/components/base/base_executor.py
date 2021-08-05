@@ -13,6 +13,7 @@ from onceml.types.artifact import Artifact
 from typing import Any, List, Dict, Optional
 from onceml.types.state import State
 
+
 #from abc import abstractmethod
 class BaseExecutor:
     """BaseExecutor,组件实际执行的逻辑
@@ -22,6 +23,7 @@ class BaseExecutor:
     """
     def __init__(self):
         pass
+
     #print(self._type)
 
     # def __new__(cls):
@@ -31,9 +33,9 @@ class BaseExecutor:
     #     return super().__new__(cls)
 
     def Do(self,
-           state:State ,
+           state: State,
            params: dict,
-           data_dir:str,
+           data_dir: str,
            input_channels: Optional[Dict[str, Channels]] = None,
            input_artifacts: Optional[Dict[str, Artifact]] = None) -> Channels:
         """
@@ -60,10 +62,12 @@ class BaseExecutor:
         """
 
         pass
-    def pre_execute(self,state:State):
+
+    def pre_execute(self, state: State, params: dict, data_dir: str):
         """供Cycle类型组件使用，因为Cycle组件会循环执行Cycle函数，有一些全局变量只需要初始化一次即可
         """
         pass
+
     def Cycle(
             self,
             state: State,

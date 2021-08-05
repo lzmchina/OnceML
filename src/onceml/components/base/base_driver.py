@@ -469,7 +469,12 @@ class BaseDriver(abc.ABC):
                 self._pipeline_id, self._component.id)
         else:
             # 首先用户自定义的pre_execute逻辑
-            self._executor.pre_execute(self._component.state)
+            self._executor.pre_execute(state=self._component.state,
+                                       params=self._component._params,
+                                       data_dir=os.path.join(
+                                           global_config.OUTPUTSDIR,
+                                           self._component.artifact.url,
+                                           Component_Data_URL.ARTIFACTS.value))
             # 将state保存
             self._component.state.dump()
             # 然后再根据组件是否有cycle类型的上游组件来进行后面的操作
@@ -539,7 +544,7 @@ class BaseDriver(abc.ABC):
         """
         logger.logger.warning('清空文件夹{}'.format(component_dir))
         try:
-            shutil.rmtree(component_dir)
+            shutil.rmtree(component_dir, ignore_errors=True)
         except FileNotFoundError:
             logger.logger.warning('组件{}的目录已经不存在'.format(self._component.id))
         os.makedirs(component_dir, exist_ok=True)
@@ -636,9 +641,9 @@ class BaseDriver(abc.ABC):
         elif isinstance(self._component, base_component.BaseComponent):
             # step 2
             logger.logger.info('目前是BaseComponent的子类')
-            self._component._state = State(json_path=os.path.join(
+            self._component._state.json_url = os.path.join(
                 global_config.OUTPUTSDIR, self._component.artifact.url,
-                Component_Data_URL.STATE.value))
+                Component_Data_URL.STATE.value)
             if self._component._changed:
                 logger.logger.warning('组件被修改，重建目录')
                 self.clear_component_data(component_dir=os.path.join(

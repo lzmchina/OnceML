@@ -28,7 +28,7 @@ class State(Jsonable):
         self.json_url = json_path
         self.data = data or {}
     def to_json_dict(self):
-        return self.data.items()
+        return self.__dict__
     def load(self, json_url: str=None):
         '''从一个json文件里恢复state
         '''
@@ -47,3 +47,5 @@ class State(Jsonable):
     def update(self,data:Dict[str,Any]):
         self.data.update(data)
         self.dump()
+    def __str__(self) -> str:
+        return self.data.__str__()

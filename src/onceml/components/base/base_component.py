@@ -70,7 +70,7 @@ class BaseComponent(Jsonable):
                 raise TypeError('inputs必须是BaseComponent类或子类')
         #组件运行前传入的静态参数
         self._params = {}
-        #组件运行中产生的动态参数
+        #组件运行中产生的结果
         self._channel = {}
         for key, value in args.items():
             if type(value) == OutputChannel:  # 组件的Channels
