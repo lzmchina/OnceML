@@ -31,6 +31,8 @@ class _ObjectType(object):
     # and __class__ fields in the dictionary. The serialized value of the proto is
     # stored in the dictionary with key of _PROTO_VALUE_KEY.
     PROTO = 'proto'
+    
+    FUNC='function'
 
 
 class Jsonable():
@@ -126,6 +128,13 @@ class ComponentEncoder(json.JSONEncoder):
             d['__module__'] = obj.__module__
             d['__object_type__'] = _ObjectType.CLASS
             return d
+        elif inspect.isfunction(obj):
+            #一般的function
+            d = {}
+            d['__class__'] = obj.__name__
+            d['__module__'] = obj.__module__
+            d['__object_type__'] = _ObjectType.FUNC
+            return d
         # python基本类型，可以直接序列化
         #return json.JSONEncoder.default(self, obj)
         return super(ComponentEncoder, self).default(obj)
@@ -161,6 +170,8 @@ class ComponentDecoder(json.JSONDecoder):
                                  jsonable_class_type)
             return jsonable_class_type.from_json_dict(obj)
         elif object_type == _ObjectType.CLASS:
+            return _extract_class(obj)
+        elif object_type==_ObjectType.FUNC:
             return _extract_class(obj)
         # handling the resolution of nested objects
         if isinstance(obj, dict):

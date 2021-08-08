@@ -44,6 +44,7 @@ class _executor(BaseExecutor):
 
         else:
             logger.warning("当前只有一个符合条件的目录，跳过")
+            return None
         return {'checkpoint': state["fileid"]}
 
     def pre_execute(self, state: State, params: dict, data_dir: str):

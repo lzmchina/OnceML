@@ -17,10 +17,11 @@ information on PyScaffold see https://pyscaffold.org/.
 
 ## docker镜像制作
 ### pip依赖基础镜像
-docker build . -f Dockerfile/require.Dockerfile  --build-arg "HTTPS_PROXY=114.212.84.223:8889" -t liziming/onceml-pip:latest
-docker push liziming/onceml-pip
+docker build . -f Dockerfile/require.Dockerfile  --build-arg "HTTPS_PROXY=114.212.80.19:21087" -t liziming/onceml-requirements:latest
+
+docker build . -f Dockerfile/require.Dockerfile   -t liziming/onceml-requirements:latest
+docker push liziming/onceml-requirements
 ### 测试镜像
-docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.84.223:8889" -t liziming/onceml
-docker push liziming/onceml
+docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.80.19:21087" -t liziming/onceml:0.0.1
 ### NFS server
 https://hub.docker.com/r/itsthenetwork/nfs-server-alpine

@@ -422,8 +422,34 @@ class BaseDriver(abc.ABC):
                 }),
                 timeout=3)  # 3秒的timeout
             for host in host_list)
+        need_again_send=False
         res_list = grequests.map(req_list, exception_handler=err_handler)
         logger.logger.info(res_list)
+        for i in range(host_list):
+            if res_list[i].status_code!=200:
+                need_again_send=True
+                break
+        while need_again_send:
+            time.sleep(2)
+            need_again_send=False
+            logger.logger.info("开始重发")
+            res_list = grequests.map(req_list, exception_handler=err_handler)
+            logger.logger.info(res_list)
+            for i in range(host_list):
+                if res_list[i].status_code!=200:
+                    need_again_send=True
+                    break
+        #     else:
+        #         msg_flag[i]=True
+        # failed=[]
+        # for i in range(host_list):
+        #     if res_list[i].status_code!=200:
+        #         failed.append(req_list[i])
+        #     else:
+        #         msg_flag[i]=True
+        # while len(failed)!=0:#可能后继组件的端口上还没有程序监听
+        #     logger.logger.warning("有失败消息，需要将其重新发送")
+        #     res_list = grequests.map(failed, exception_handler=err_handler)
         # except:
         #    logger.logger.error('没有在{}找到get_ip_port_by_label函数'.format(self._uniop))
 
@@ -488,6 +514,11 @@ class BaseDriver(abc.ABC):
                 while True:
                     channel_result = self.execute(Do_Channels,
                                                   Artifacts)  # 获得运行的结果
+                    if channel_result is None:
+                        # 如果消息为None，则直接跳过
+                        logger.logger.info('暂时没有需要发送至下游组件的消息，跳过执行')
+                        time.sleep(2)
+                        continue
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)

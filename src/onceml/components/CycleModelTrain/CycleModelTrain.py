@@ -10,7 +10,7 @@ from types import FunctionType, GeneratorType
 import sys
 import pickle
 import onceml.types.exception as exception
-import onceml.types.channel as channel
+
 class _executor(BaseExecutor):
     def Cycle(self,
               state: State,
@@ -27,8 +27,7 @@ class _executor(BaseExecutor):
             print(value.__dict__)
         file_id = state['fileid']
         todo_files = []
-        data_source_dir=list(input_artifacts.values())[0]
-        for file in os.listdir(data_source_dir):
+        for file in os.listdir(input_artifacts.values()[0]):
             id = int(os.path.splitext(file)[0])
             if id <= input_channels.values()[0]["checkpoint"] and id > file_id:
                 #只有小于等于datasource组件传来的checkpoint、且大于组件状态file_id的文件才会来预处理
@@ -38,19 +37,17 @@ class _executor(BaseExecutor):
         print(todo_files)
         if len(todo_files) > 0:
             logger.info("当前有多个文件需要处理")
-            if int(os.path.splitext(todo_files[0])[0])!=file_id+1:
-                logger.error("CycleDataPreprocess与上游组件CycleDataSource的状态不一致")
-                sys.exit(1)
             logger.info("开始处理{}".format(todo_files[0]))
-            file_object = self.read_file_func(
-                os.path.join(data_source_dir, todo_files[0]))
+            object_iter: GeneratorType = self.feature_func(
+                os.path.join(input_artifacts.values()[0], todo_files[0]))
+
             #一个文件返回的迭代器，可能会生成多个python object
-            # saved_object_space = 10 * 1024 * 1024  #一个文件最小以10MB大小保存
-            # objects_list = []
-            # current_bytes = 0
-            #gen_id = state['gen_id']
-            #for parse_object in object_iter:
-                # file_bytes = sys.getsizeof(parse_object)
+            #saved_object_space = 10 * 1024 * 1024  #一个文件最小以10MB大小保存
+            #objects_list = []
+            #current_bytes = 0
+            gen_id = state['gen_id']
+            for timestamp,parse_object in object_iter:
+                #file_bytes = sys.getsizeof(parse_object)
 
                 # if current_bytes + file_bytes < saved_object_space:
                 #     objects_list.append(parse_object)
@@ -58,37 +55,49 @@ class _executor(BaseExecutor):
 
                 # else:
                 #     objects_list.append(parse_object)
-                #gen_id += 1
-            pickle.dump(file_object,
-                        os.path.join(data_dir, "{}.pkl".format(file_id)))
-                # current_bytes = 0
-                # objects_list = []
+                if timestamp is None :
+                    timestamp=''
+                elif type(timestamp)==int:# timestamp单位建议为秒即可
+                    timestamp=str(timestamp)
+                else:
+                    exception.TypeNotAllowedError("timestamp应该是None或者int")
+                gen_id += 1
+                pickle.dump(
+                    parse_object,
+                    os.path.join(data_dir, "{}-{}.pkl".format(timestamp,gen_id)))
+                    # current_bytes = 0
+                    # objects_list = []
             state.update({
                 "fileid": int(os.path.splitext(todo_files[0])[0]),
+                "gen_id": gen_id
             })
 
         else:
             logger.warning("当前没有文件需要处理，跳过")
-            return None
         return {'checkpoint': state["gen_id"]}
 
     def pre_execute(self, state: State, params: dict, data_dir: str):
         print('this is pre_execute')
-        self.read_file_func = params['file_parse_func']
-        #创建一个文件夹，放入用户需要的其他文件
-        #os.makedirs(os.path.join(data_dir, "extras"),exist_ok=True)
+        self.feature_func = params['feature_func']
 
-class CycleDataPreprocess(BaseComponent):
-    def __init__(self, file_parse_func: FunctionType, data_source:BaseComponent,**args):
+
+class CycleModelTrain(BaseComponent):
+    def __init__(self, timestamp_func: FunctionType, **args):
         """
         description
-        ---------
-        CycleDataPreprocess是用来进行数据预处理的，收到CycleDataSource的checkpoint后，会解析文件，并将结果保存为pickle对象
+        ---------   
+        CycleModelTrain组件是用来产生一个可用于部署的模型，它会提供sample的url list，用户拿到这些路径后，可以自己定义是一起加载到内存里，还是使用队列
+        防止占满内存。然后返回一个模型，共后续的model serving使用
+
+        同时，会提供timestamp筛选的功能，只要这些满足条件的samples
+
+        它还拥有模型集成功能，只需要声明依赖的模型的list，就能自动将sample送至依赖的模型，得到结果
+
+       
 
         Args
         -------
-        file_parse_func:解析文件的函数，需要用户自己提供，会给定一个文件的url，有用户自己定义怎样解析，怎样预处理
-        用户需要在这个函数里返回一个python对象，组件再调用这个迭代器，去生成python对象数组，最后保存成二进制文件
+        timestamp_func:用来产生时间戳的函数，用户提供这个函数可用来帮助筛选使用的数据集，返回一个闭区间
 
 
         Returns
@@ -98,15 +107,10 @@ class CycleDataPreprocess(BaseComponent):
         -------
         
         """
-        if  (not isinstance(data_source,BaseComponent)):
-            exception.TypeNotAllowedError("data_source应该是BaseComponent的子类")
-        super().__init__(file_parse_func=file_parse_func,
-                         executor=_executor,
-                         inputs=[data_source],
+
+        super().__init__(executor=_executor,
+                         inputs=None,
                          checkpoint=channel.OutputChannel(str),
+                         
                          **args)
-        self.state = {
-            "fileid": -1,  #fileid表示对上一组件的输出文件的处理进度
-            "gen_id":
-            -1  #gen_tree表示自身产生的文件，因为每次对上一组件输出的文件进行解析，返回的迭代器会产生一个至多个对象
-        }
+        self.state = {"file_id": -1}

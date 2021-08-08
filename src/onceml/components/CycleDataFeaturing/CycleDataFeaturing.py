@@ -10,7 +10,7 @@ from types import FunctionType, GeneratorType
 import sys
 import pickle
 import onceml.types.exception as exception
-
+import onceml.types.channel as channel
 class _executor(BaseExecutor):
     def Cycle(self,
               state: State,
@@ -27,7 +27,8 @@ class _executor(BaseExecutor):
             print(value.__dict__)
         file_id = state['fileid']
         todo_files = []
-        for file in os.listdir(input_artifacts.values()[0]):
+        data_preprocess_dir=list(input_artifacts.values())[0]
+        for file in os.listdir(data_preprocess_dir):
             id = int(os.path.splitext(file)[0])
             if id <= input_channels.values()[0]["checkpoint"] and id > file_id:
                 #只有小于等于datasource组件传来的checkpoint、且大于组件状态file_id的文件才会来预处理
@@ -38,15 +39,14 @@ class _executor(BaseExecutor):
         if len(todo_files) > 0:
             logger.info("当前有多个文件需要处理")
             logger.info("开始处理{}".format(todo_files[0]))
-            object_iter: GeneratorType = self.feature_func(
-                os.path.join(input_artifacts.values()[0], todo_files[0]))
+            object_iter: GeneratorType = self.feature_func(pickle.load(os.path.join(data_preprocess_dir, todo_files[0])))
 
             #一个文件返回的迭代器，可能会生成多个python object
             #saved_object_space = 10 * 1024 * 1024  #一个文件最小以10MB大小保存
             #objects_list = []
             #current_bytes = 0
             gen_id = state['gen_id']
-            for timestamp,parse_object in object_iter:
+            for timestamp,x_data,y_label in object_iter:
                 #file_bytes = sys.getsizeof(parse_object)
 
                 # if current_bytes + file_bytes < saved_object_space:
@@ -63,7 +63,7 @@ class _executor(BaseExecutor):
                     exception.TypeNotAllowedError("timestamp应该是None或者int")
                 gen_id += 1
                 pickle.dump(
-                    parse_object,
+                    (x_data,y_label),
                     os.path.join(data_dir, "{}-{}.pkl".format(timestamp,gen_id)))
                     # current_bytes = 0
                     # objects_list = []
@@ -74,6 +74,7 @@ class _executor(BaseExecutor):
 
         else:
             logger.warning("当前没有文件需要处理，跳过")
+            return None
         return {'checkpoint': state["gen_id"]}
 
     def pre_execute(self, state: State, params: dict, data_dir: str):
@@ -82,7 +83,7 @@ class _executor(BaseExecutor):
 
 
 class CycleDataFeaturing(BaseComponent):
-    def __init__(self, feature_func: FunctionType, **args):
+    def __init__(self, feature_func: FunctionType, data_preprocess:BaseComponent,**args):
         """
         description
         ---------   
@@ -92,7 +93,10 @@ class CycleDataFeaturing(BaseComponent):
 
         Args
         -------
-        feature_func：特征工程的处理过程，会传给它预处理后文件的路径，返回可带🈶️时间戳的sample数组或者迭代器
+        feature_func：特征工程的处理过程，会传给它预处理后文件的路径，返回可带有时间戳的sample数组或者迭代器
+        它应该返回一个list或者迭代器，list的最高维应该是样本数目，每一个元素应该是三元组（timestamp,x_data,y_label）
+        把x与y分开是为了模型集成
+        
 
 
         Returns
@@ -102,9 +106,10 @@ class CycleDataFeaturing(BaseComponent):
         -------
         
         """
-
+        if not isinstance(data_preprocess,BaseComponent):
+            exception.TypeNotAllowedError("data_preprocess应该是BaseComponent的子类")
         super().__init__(executor=_executor,
-                         inputs=None,
+                         inputs=[data_preprocess],
                          checkpoint=channel.OutputChannel(str),
                          feature_func=feature_func,
                          **args)

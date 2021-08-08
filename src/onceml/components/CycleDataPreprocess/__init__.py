@@ -1,1 +1,1 @@
-from onceml.components.CycleDataPreprocess.CycleDataPreprocess import 
+from onceml.components.CycleDataPreprocess.CycleDataPreprocess import CycleDataPreprocess
