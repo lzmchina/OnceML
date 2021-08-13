@@ -9,7 +9,7 @@
 '''
 import abc
 from types import List
-class ModelGenarator(abc.ABC):
+class ModelServing(abc.ABC):
     def __init__(self,model_checkpoints:str):
         """
         description

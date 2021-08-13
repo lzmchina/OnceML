@@ -1,5 +1,6 @@
 from typing import Dict
 from onceml.components.base import BaseComponent, BaseExecutor
+from onceml.templates.ModelGenerator import ModelGenerator
 from onceml.types.state import State
 import time
 import os
@@ -10,7 +11,7 @@ from types import FunctionType, GeneratorType
 import sys
 import pickle
 import onceml.types.exception as exception
-
+import onceml.types.channel as channel
 class _executor(BaseExecutor):
     def Cycle(self,
               state: State,
@@ -78,16 +79,19 @@ class _executor(BaseExecutor):
 
     def pre_execute(self, state: State, params: dict, data_dir: str):
         print('this is pre_execute')
-        self.feature_func = params['feature_func']
-
+        
 
 class CycleModelTrain(BaseComponent):
-    def __init__(self, timestamp_func: FunctionType, **args):
+    def __init__(self, model_generator_cls: ModelGenerator, 
+                 feauture_component:BaseComponent,
+                 emsemble_models:list,
+                 max_checkpoint_store=1,
+                 **args):
         """
         description
         ---------   
         CycleModelTrain组件是用来产生一个可用于部署的模型，它会提供sample的url list，用户拿到这些路径后，可以自己定义是一起加载到内存里，还是使用队列
-        防止占满内存。然后返回一个模型，共后续的model serving使用
+        防止占满内存。然后返回一个模型，供后续的model serving使用
 
         同时，会提供timestamp筛选的功能，只要这些满足条件的samples
 
@@ -97,9 +101,13 @@ class CycleModelTrain(BaseComponent):
 
         Args
         -------
-        timestamp_func:用来产生时间戳的函数，用户提供这个函数可用来帮助筛选使用的数据集，返回一个闭区间
+        model_generator_cls:用来封装功能的类
 
+        feauture_component:特征工程组件
+        
+        emsemble_models:需要集成的模型列表，例如["modelB","modelC"]
 
+        max_checkpoint_store:最多保存模型的数目
         Returns
         -------
         
@@ -109,8 +117,10 @@ class CycleModelTrain(BaseComponent):
         """
 
         super().__init__(executor=_executor,
-                         inputs=None,
+                         inputs=[feauture_component],
                          checkpoint=channel.OutputChannel(str),
-                         
+                         model_generator_cls=model_generator_cls,
+                         emsemble_models=emsemble_models,
+                         max_checkpoint_store=max_checkpoint_store,
                          **args)
         self.state = {"file_id": -1}

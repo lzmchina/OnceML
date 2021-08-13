@@ -43,9 +43,7 @@ class State(Jsonable):
         return self.data.get(key)
     def __setitem__(self,key,value):
         self.data.update({key:value})
-        self.dump()
     def update(self,data:Dict[str,Any]):
         self.data.update(data)
-        self.dump()
     def __str__(self) -> str:
         return self.data.__str__()

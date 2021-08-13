@@ -83,7 +83,7 @@ class CycleDataSource(BaseComponent):
         super().__init__(listen_data_dir=listen_data_dir,
                          executor=_executor,
                          inputs=None,
-                         checkpoint=channel.OutputChannel(str),
+                         checkpoint=channel.OutputChannel(int),
                          **args)
         self.state = {
             "currentId": -1,  # 当前正在处理的文件夹id，从-1开始,表示还没有开始处理

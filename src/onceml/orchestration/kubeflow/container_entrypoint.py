@@ -1,12 +1,4 @@
-from gevent import monkey
 
-
-def stub(*args, **kwargs):  # pylint: disable=unused-argument
-    pass
-
-
-monkey.patch_all = stub
-import grequests
 import onceml.orchestration.kubeflow.kfp_driver as kfp_driver
 import onceml.utils.logger as logger
 import onceml.utils.json_utils as json_utils

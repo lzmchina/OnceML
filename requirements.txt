@@ -1,3 +1,5 @@
+aiohttp==3.7.4.post0
+async-timeout==3.0.1
 attrs==21.2.0
 autopep8==1.5.7
 backcall==0.2.0
@@ -32,6 +34,7 @@ kfp-pipeline-spec==0.1.7
 kfp-server-api==1.5.0
 kubernetes==11.0.0
 matplotlib-inline==0.1.2
+multidict==5.1.0
 numpy==1.21.1
 oauthlib==3.1.0
 packaging==20.9
@@ -62,10 +65,12 @@ tabulate==0.8.9
 termcolor==1.1.0
 toml==0.10.2
 traitlets==5.0.5
+typing-extensions==3.10.0.0
 urllib3==1.26.4
 wcwidth==0.2.5
 websocket-client==0.59.0
 wrapt==1.12.1
 yapf==0.31.0
+yarl==1.6.3
 zope.event==4.5.0
 zope.interface==5.4.0

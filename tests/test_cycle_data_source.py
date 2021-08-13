@@ -1,5 +1,3 @@
-import grequests
-import requests
 import onceml.types.channel as channel
 from onceml.orchestration import KubeflowRunner, Pipeline
 import onceml.utils.json_utils as json_utils

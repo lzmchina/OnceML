@@ -1,7 +1,8 @@
 import json
+import ssl
 import time
-import grequests
-
+import aiohttp
+import asyncio
 import urllib
 from queue import Queue
 from typing import Any, Dict, List
@@ -31,6 +32,7 @@ import onceml.utils.time as time_utils
 import onceml.types.phases as phases
 
 import onceml.utils.py_module_utils as py_module_utils
+import onceml.utils.http as httpUtil
 
 
 class BaseDriverRunType(Enum):
@@ -91,6 +93,7 @@ def generate_handler(driver_instance):
         def add_msg_to_queue(self, json_str: str):
             '''将收到的上游的组件的消息放入对应的消息队列
             '''
+            logger.logger.info(json_str)
             msg = dict(json.loads(json_str))
             compoent_id = msg.pop('component')
             self._driver_instance.add_msg(compoent_id, msg)
@@ -383,8 +386,7 @@ class BaseDriver(abc.ABC):
 
         executor应该由开发者二次继承开发
         """
-        # 先来保存下状态
-        self._component.state.dump()
+
         return self._executor_func(state=self._component.state,
                                    params=self._component._params,
                                    data_dir=os.path.join(
@@ -397,62 +399,35 @@ class BaseDriver(abc.ABC):
     def send_channels(self, validated_channels: Dict):
         '''将经过验证的结果发送给后续cycle节点（如果有的话）
         '''
-        def err_handler(request, exception):
-            logger.logger.error("请求出错")
 
-        # try:
         host_list = self.get_ip_by_label_func(
             project=self._project,
             task_name=self._pipeline_root[0],
             model_name=self._pipeline_root[1],
             component_id=self._component.id)
         logger.logger.info('host_list: {}'.format(host_list))
-        # 开始并发式的发送消息
-        req_list = (
-            grequests.post(
-                'http://{ip}:{port}'.format(ip=host[0],
-                                            port=host[1]
-                                            # ip='http://httpbin.org/delay/5'
-                                            ),
-                data=json.dumps({
-                    'component': self._component.id,  # 标志一下是哪个component发的
-                    'timestamp': time_utils.get_timestamp(
-                    ),  # 写一下数据产生的时间，接收方只需要保存最新的即可，防止两边速度不一致
-                    **validated_channels
-                }),
-                timeout=3)  # 3秒的timeout
-            for host in host_list)
-        need_again_send=False
-        res_list = grequests.map(req_list, exception_handler=err_handler)
-        logger.logger.info(res_list)
-        for i in range(host_list):
-            if res_list[i].status_code!=200:
-                need_again_send=True
-                break
-        while need_again_send:
+        while not all([x[0] for x in host_list]):
+            host_list = self.get_ip_by_label_func(
+                project=self._project,
+                task_name=self._pipeline_root[0],
+                model_name=self._pipeline_root[1],
+                component_id=self._component.id)
+            logger.logger.info('host_list: {}'.format(host_list))
             time.sleep(2)
-            need_again_send=False
-            logger.logger.info("开始重发")
-            res_list = grequests.map(req_list, exception_handler=err_handler)
-            logger.logger.info(res_list)
-            for i in range(host_list):
-                if res_list[i].status_code!=200:
-                    need_again_send=True
-                    break
-        #     else:
-        #         msg_flag[i]=True
-        # failed=[]
-        # for i in range(host_list):
-        #     if res_list[i].status_code!=200:
-        #         failed.append(req_list[i])
-        #     else:
-        #         msg_flag[i]=True
-        # while len(failed)!=0:#可能后继组件的端口上还没有程序监听
-        #     logger.logger.warning("有失败消息，需要将其重新发送")
-        #     res_list = grequests.map(failed, exception_handler=err_handler)
-        # except:
-        #    logger.logger.error('没有在{}找到get_ip_port_by_label函数'.format(self._uniop))
 
+        # 开始并发式的发送消息
+
+        data = {
+            'component': self._component.id,  # 标志一下是哪个component发的
+            'timestamp':
+            time_utils.get_timestamp(),  # 写一下数据产生的时间，接收方只需要保存最新的即可，防止两边速度不一致
+            **validated_channels
+        }
+        hosts = []
+        for host in host_list:
+            # print('2222222')
+            hosts.append('http://{ip}:{port}'.format(ip=host[0], port=host[1]))
+        httpUtil.asyncMsg(hosts,data,3)
     def base_component_run(self):
         """普通组件的运行
         description
@@ -502,7 +477,7 @@ class BaseDriver(abc.ABC):
                                            self._component.artifact.url,
                                            Component_Data_URL.ARTIFACTS.value))
             # 将state保存
-            self._component.state.dump()
+            #self._component.state.dump()
             # 然后再根据组件是否有cycle类型的上游组件来进行后面的操作
             # 如果是没有cycle上游组件，则认为他是信号源，需要不断的执行，并向后发送消息
             # 如果有，则认为他是由前面cycle组件驱动的
@@ -522,10 +497,11 @@ class BaseDriver(abc.ABC):
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
-                    # 将state保存
-                    self._component.state.dump()
+
                     # 将结果发送给后续cycle节点(如果有的话)
                     self.send_channels(validated_channels)
+                    # 将state保存
+                    self._component.state.dump()
 
             else:
                 logger.logger.info('该组件受到前面组件信号的控制')
@@ -551,10 +527,11 @@ class BaseDriver(abc.ABC):
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
-                    # 将state保存
-                    self._component.state.dump()
+
                     # 将结果发送给后续cycle节点(如果有的话)
                     self.send_channels(validated_channels)
+                    # 将state保存
+                    self._component.state.dump()
                     time.sleep(5)
 
     def clear_component_data(self, component_dir: str):
