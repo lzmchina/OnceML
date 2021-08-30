@@ -8,6 +8,7 @@ import argparse
 def main():
     logger.logger.info('开始执行组件')
     parser = argparse.ArgumentParser()
+    
     parser.add_argument('--project', type=str, required=True)
     parser.add_argument('--pipeline_root', type=str, required=True)
     parser.add_argument('--serialized_component', type=str, required=True)

@@ -28,7 +28,7 @@ class _executor(BaseExecutor):
         print(batch_dirs)
         if len(batch_dirs) > 1:
             logger.info("当前有多个目录")
-            logger.info("开始处理{}".format(batch_dirs[0]))
+            logger.info("开始处理batch-{} 文件夹".format(batch_dirs[0]))
             file_id = state["fileid"]
             for file in os.listdir(
                     os.path.join(params['listen_data_dir'],
@@ -44,7 +44,7 @@ class _executor(BaseExecutor):
 
         else:
             logger.warning("当前只有一个符合条件的目录，跳过")
-            return None
+            return {'checkpoint': state["fileid"]}
         return {'checkpoint': state["fileid"]}
 
     def pre_execute(self, state: State, params: dict, data_dir: str):

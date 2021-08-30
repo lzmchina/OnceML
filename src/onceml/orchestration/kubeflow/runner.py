@@ -22,7 +22,8 @@ class KubeflowRunner(BaseRunner):
                  output_dir: str = None,
                  kfp_host: str = None,
                  nfc_host: str = None,
-                 docker_image: str = None):
+                 docker_image: str = None,
+                 namespace:str="kubeflow"):
         """负责将一个pipeline转换成kubeflow workflow资源
         description
         ---------
@@ -44,6 +45,8 @@ class KubeflowRunner(BaseRunner):
         nfc_host：NFC服务器的ip，默认为当前机器的ip
 
         docker_image:kfp里面的pod使用的镜像
+        
+        namespace:将pod部署在某个namespace里
 
         Returns
         -------
@@ -60,6 +63,7 @@ class KubeflowRunner(BaseRunner):
         self.kfp_parameters = []
         self._output_dir = output_dir or kfp_config.KFPOUTPUT
         self.docker_image = docker_image
+        self.namespace=namespace
         os.makedirs(os.path.join(self._output_dir, 'yamls'), exist_ok=True)
 
         # 在kfp中创建onceml专属的pv
@@ -92,6 +96,7 @@ class KubeflowRunner(BaseRunner):
         # component_to_kfp_op['nfs']=Kfp_component.NFSContainerOp(pipeline.id)
         for component in pipeline.components:
             # ktp_component=
+            component.resourceNamepace=self.namespace
             depends_on = {}
             Do_deploytype = []
             for upstreamComponent in component.upstreamComponents:

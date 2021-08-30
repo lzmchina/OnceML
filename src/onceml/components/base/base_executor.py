@@ -22,6 +22,8 @@ class BaseExecutor:
 
     """
     def __init__(self):
+        self.component_msg:dict={}
+        self.pod_label_value=""
         pass
 
     #print(self._type)

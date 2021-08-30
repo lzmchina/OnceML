@@ -152,25 +152,3 @@ def ensure_nfs_svc(NFS_SVC_NAME: str, selector: dict):
     logger.logger.info("开始创建nfs server svc:{}".format(NFS_SVC_NAME))
     k8s_ops.apply_nfs_svc(NFS_SVC_NAME, selector)
 
-
-def get_ip_port_by_label(project: str, task_name: str, model_name: str,
-                         component_id: str):
-    '''通过label找到一组pod的内部ip地址
-    '''
-    # logger.logger.info("{}={}".format(
-    #     kfp_config.COMPONENT_SENDER_POD_LABEL.format(task=task_name,
-    #                                                  project=project,
-    #                                                  model=model_name,
-    #                                                  component=component_id),
-    #     kfp_config.COMPONENT_SENDER_POD_VALUE))
-    pod_list = k8s_ops.get_pods_by_label(
-        namespace=kfp_config.NAMESPACE,
-        label_selector="{}={}".format(
-            kfp_config.COMPONENT_SENDER_POD_LABEL.format(
-                project=project,
-                task=task_name,
-                model=model_name,
-                component=component_id),
-            kfp_config.COMPONENT_SENDER_POD_VALUE))
-
-    return [[pod.status.pod_ip, kfp_config.SERVERPORT] for pod in pod_list]

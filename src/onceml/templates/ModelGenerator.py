@@ -11,15 +11,17 @@
 
 import abc
 from types import List
+from typing import Dict, Tuple
 class ModelGenerator(abc.ABC):
-    def __init__(self,model_checkpoints:str):
+    @abc.abstractmethod
+    def __init__(self,model_checkpoints:str=None):
         """
         description
         ---------
         在初始化时会初始化你的模型，供后续的训练、验证、预测
         Args
         -------
-        model_checkpoints:用于存放模型参数文件的目录，可以自行恢复模型，这里是直接传入最新timestamp的模型目录
+        model_checkpoints:用于存放模型参数文件的目录，可以自行恢复模型，这里是直接传入最新timestamp的模型目录,如果没有，则是None
         Returns
         -------
         
@@ -30,7 +32,7 @@ class ModelGenerator(abc.ABC):
         
         pass
     @abc.abstractmethod
-    def filter(self):
+    def filter(self)->Tuple:
         """
         description
         ---------
@@ -50,7 +52,7 @@ class ModelGenerator(abc.ABC):
         
         pass
     @abc.abstractmethod
-    def train(self,file_list:List):
+    def train(self,file_list:List,ensemble_outout:Dict[str,list]):
         """
         description
         ---------
@@ -90,11 +92,12 @@ class ModelGenerator(abc.ABC):
         
         pass
     @abc.abstractmethod
-    def predict(self,x_datas:list)->list:
+    def predict(self,file_list:list,save_dir)->list:
         """
         description
         ---------
-        用于对外进行模型集成的服务,只需要将x_datas视为模型的输入，返回相应的结果即可
+        用于对外进行模型集成的服务,只需要将file_list视为需要，返回相应的结果即可
+        save_dir即为保存的目录
         Args
         -------
         
@@ -108,7 +111,7 @@ class ModelGenerator(abc.ABC):
         
         pass
     @abc.abstractmethod
-    def eval(self,file_list:List)->bool:
+    def eval(self,file_list:List,ensemble_outout:Dict[str,list])->bool:
         """
         description
         ---------

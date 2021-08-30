@@ -19,7 +19,6 @@ async def http_request(url, data, headers, timeout):
 def asyncMsg(hosts:Tuple,data,timeout:int):
     loop = asyncio.get_event_loop()
     task_list = []
-    
     for host in hosts:
         # print('2222222')
         task_list.append(
@@ -37,7 +36,8 @@ def asyncMsg(hosts:Tuple,data,timeout:int):
             if results[i] != 200:
                 need_again_send = True
                 break
-    except:
+    except Exception as e:
+        logger.logger.error(e)
         logger.logger.error("发送失败")
         need_again_send = True
 
@@ -66,3 +66,31 @@ def asyncMsg(hosts:Tuple,data,timeout:int):
         except:
             logger.logger.error("发送失败")
             need_again_send = True
+def asyncMsgByHost(hosts_list:list,data,timeout:int):
+    loop = asyncio.get_event_loop()
+    ensure=False
+    while not ensure:
+        task_list=[]
+        for host in hosts_list:
+            # print('2222222')
+            task_list.append(
+                asyncio.ensure_future(
+                    http_request(
+                        host,
+                        data, {
+                            "Content-Type": "application/json",
+                        }, 3)))
+        ensure=True
+        try:
+            results = loop.run_until_complete(asyncio.gather(*task_list))
+            logger.logger.info(results)
+            for i, host in enumerate(hosts_list):
+                if results[i] != 200:
+                    ensure = False
+                    break
+        except:
+            logger.logger.error("发送失败")
+            ensure = False
+
+    
+    

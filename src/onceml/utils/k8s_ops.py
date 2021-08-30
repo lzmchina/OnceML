@@ -5,6 +5,7 @@ import socket
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
 import onceml.global_config as global_config
 import onceml.utils.logger as logger
+import onceml.configs.k8sConfig as k8sConfig
 if os.getenv('{}ENV'.format(global_config.project_name)) == 'INPOD':
     config.load_incluster_config()  #在pod里面
 else:  #在集群外
@@ -27,6 +28,8 @@ def get_crd_instance_list(namespace: str, group: str, label_selector: str,
 
 
 def get_pods_by_label(namespace: str, label_selector: str)->List[client.V1Pod]:
+    '''通过label selector在某个namespace找到相应的pod list
+    '''
     return _k8s_client.list_namespaced_pod(namespace=namespace,
                                            label_selector=label_selector).items or []
 
@@ -224,3 +227,24 @@ def get_nfs_svc_ip(NFS_SVC_NAME: str, namespace: str):
         return svc.spec.cluster_ip
     except:
         logger.logger.error('SVC {}不存在'.format(NFS_SVC_NAME))
+def get_ip_port_by_label(project: str, task_name: str, model_name: str,
+                         component_id: str,namespace:str,port:int):
+    '''通过label找到一组pod的内部ip地址
+    '''
+    # logger.logger.info("{}={}".format(
+    #     kfp_config.COMPONENT_SENDER_POD_LABEL.format(task=task_name,
+    #                                                  project=project,
+    #                                                  model=model_name,
+    #                                                  component=component_id),
+    #     kfp_config.COMPONENT_SENDER_POD_VALUE))
+    pod_list = get_pods_by_label(
+        namespace=namespace,
+        label_selector="{}={}".format(
+            k8sConfig.COMPONENT_SENDER_POD_LABEL.format(
+                project=project,
+                task=task_name,
+                model=model_name,
+                component=component_id),
+            k8sConfig.COMPONENT_SENDER_POD_VALUE))
+
+    return [[pod.status.pod_ip, port] for pod in pod_list]

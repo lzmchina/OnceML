@@ -12,7 +12,7 @@ import onceml.global_config as global_config
 import os
 import onceml.utils.pipeline_utils as pipeline_utils
 import onceml.types.component_msg as component_msg
-
+import onceml.configs.k8sConfig as k8sConfig
 
 def NFSContainerOp(pipeline_id: str):
     '''运行NFS的容器
@@ -148,12 +148,12 @@ class KfpComponent:
                             model_name=model_name,
                             component=c)
                     self.container_op.add_pod_label(
-                        name=kfp_config.COMPONENT_SENDER_POD_LABEL.format(
+                        name=k8sConfig.COMPONENT_SENDER_POD_LABEL.format(
                             project=global_config.PROJECTDIRNAME,
                             task=task_name,
                             model=_model_name,
                             component=_com_id),
-                        value=kfp_config.COMPONENT_SENDER_POD_VALUE)
+                        value=k8sConfig.COMPONENT_SENDER_POD_VALUE)
         # 设置本组件要在Do类型组件完成之后启动
         for c_id, v in depends_on.items():
             if c_id in Do_deploytype:
@@ -172,7 +172,7 @@ class KfpComponent:
         self.container_op.execution_options.caching_strategy.max_cache_staleness = "P0D"
         # 给pod添加label，方便后续的查询,value为{task name}_{model name}_{component id}
         self.container_op.add_pod_label(
-            name=kfp_config.COMPONENT_POD_LABEL,
+            name=k8sConfig.COMPONENT_POD_LABEL,
             value=('%s-%s-%s-%s' % (global_config.PROJECTDIRNAME, task_name,
                                     model_name, component.id)))
         #加入环境变量，方便pod里的程序能够使用api
@@ -180,3 +180,4 @@ class KfpComponent:
             k8s_ops.client.V1EnvVar(name='{}ENV'.format(
                 global_config.project_name),
                                     value='INPOD'))
+        

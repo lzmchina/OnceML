@@ -73,7 +73,7 @@ class _executor(BaseExecutor):
 
         else:
             logger.warning("当前没有文件需要处理，跳过")
-            return None
+            return  {'checkpoint': state["fileid"]}
         return {'checkpoint': state["fileid"]}
 
     def pre_execute(self, state: State, params: dict, data_dir: str):

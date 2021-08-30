@@ -4,15 +4,21 @@ import onceml.utils.json_utils as json_utils
 import onceml.components.base.base_component as base_component
 import onceml.components.base.global_component as global_component
 import onceml.types.phases as phases
-import os 
-def generate_pipeline_id(task_name,model_name)->str:
-    return '.'.join([task_name,model_name])
+import os
+
+
+def generate_pipeline_id(task_name, model_name) -> str:
+    return '.'.join([task_name, model_name])
+
+
 def create_pipeline_dir(pipeline_dir):
-    os.makedirs(pipeline_dir,exist_ok=True)
+    os.makedirs(pipeline_dir, exist_ok=True)
+
+
 def db_check_pipeline(task_name, model_name):
     '''通过数据库检查某个pipeline是否存在
     '''
-    if db.select(generate_pipeline_id(task_name,model_name)) is None:
+    if db.select(generate_pipeline_id(task_name, model_name)) is None:
         return False
     else:
         return True
@@ -29,7 +35,7 @@ def db_update_pipeline(task_name, model_name):
 
 
 def db_delete_pipeline(task_name, model_name):
-    '''通过数据库删除某个pipeline，以表示其存在
+    '''通过数据库删除某个pipeline
     '''
     del db['.'.join([task_name, model_name])]
     if db.select('.'.join([task_name, model_name])) is None:
@@ -85,12 +91,13 @@ def db_get_pipeline_component_deploytype(task_name, model_name,
     '''
     return db.select('.'.join(
         [task_name, model_name, alias_component, 'deploytype']))
-def db_get_pipeline_component_phase(task_name, model_name,
-                                         component):
+
+
+def db_get_pipeline_component_phase(task_name, model_name, component):
     '''通过数据库获取某个pipeline下某个组件的deploytype
     '''
-    return db.select('.'.join(
-        [task_name, model_name, component, 'phase']))
+    return db.select('.'.join([task_name, model_name, component, 'phase']))
+
 
 def compare_component(task_name, model_name,
                       component: base_component.BaseComponent):
@@ -180,3 +187,28 @@ def get_global_component_alias_component(
     alias_component = db.select('.'.join(
         [task_name, model_name, component.id, 'alias_component']))
     return alias_model, alias_component
+
+
+def get_pipeline_model_component_id(task_name: str, model_name: str):
+    return db.select('.'.join([task_name, model_name, 'model_component']))
+
+
+def delete_pipeline_model_component_id(task_name: str, model_name: str):
+    db.delete('.'.join([task_name, model_name, 'model_component']))
+
+
+def update_pipeline_model_component_id(preject_name: str, task_name: str,
+                                       model_name: str,
+                                       model_component_id: str):
+    db.update(
+        '.'.join([task_name, model_name, 'model_component']),
+        ".".join([preject_name, task_name, model_name, model_component_id]))
+def update_model_checkpoint(task_name: str,model_name: str,checkpoint:str):
+    db.update(
+        ".".join([task_name, model_name, 'model_checkpoint']),
+        checkpoint
+    )
+def get_model_checkpoint(task_name: str,model_name: str):
+    return db.select(
+        ".".join([task_name, model_name, 'model_checkpoint'])
+    )

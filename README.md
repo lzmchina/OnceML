@@ -23,5 +23,6 @@ docker build . -f Dockerfile/require.Dockerfile   -t liziming/onceml-requirement
 docker push liziming/onceml-requirements
 ### 测试镜像
 docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.80.19:21087" -t liziming/onceml:0.0.1
+docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=172.27.135.233:7890" -t liziming/onceml:0.0.1
 ### NFS server
 https://hub.docker.com/r/itsthenetwork/nfs-server-alpine

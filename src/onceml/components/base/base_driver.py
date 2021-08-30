@@ -10,6 +10,7 @@ import onceml.components.base.base_component as base_component
 import onceml.components.base.base_executor as base_executor
 import onceml.components.base.global_component as global_component
 from enum import Enum
+from onceml.orchestration.kubeflow import kfp_config
 import onceml.types.exception as exception
 import abc
 import importlib
@@ -25,14 +26,16 @@ from onceml.types.artifact import Artifact
 from onceml.types.state import State
 import onceml.utils.pipeline_utils as pipeline_utils
 from http.server import BaseHTTPRequestHandler
-from http.server import HTTPServer
+from http.server import HTTPServer, ThreadingHTTPServer
+from socketserver import ThreadingMixIn
 import threading
 import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
 import onceml.utils.time as time_utils
 import onceml.types.phases as phases
-
+import copy
 import onceml.utils.py_module_utils as py_module_utils
 import onceml.utils.http as httpUtil
+import onceml.utils.k8s_ops as k8s_ops
 
 
 class BaseDriverRunType(Enum):
@@ -213,14 +216,28 @@ class BaseDriver(abc.ABC):
         self._d_channels = d_channels
         self._d_artifact = d_artifact
         self._project = project
-        self._executor = self._component._executor_cls()
+        self._executor: base_executor.BaseExecutor = self._component._executor_cls(
+        )
+        self._executor.pod_label_value = '%s-%s-%s-%s' % (
+            pipeline_root, pipeline_root[0], pipeline_root[1], component.id)
+        self._executor.component_msg["pipeline_root"] = pipeline_root
+        self._executor.component_msg['task_name'] = pipeline_root[0]
+        self._executor.component_msg['model_name'] = pipeline_root[1]
+        self._executor.component_msg['component_id'] = component.id
+        self._executor.component_msg[
+            'resource_namespace'] = component.resourceNamepace
         if self._runtype == BaseDriverRunType.DO.value:
             self._executor_func = self._executor.Do
         else:
             self._executor_func = self._executor.Cycle
-        self._upstream_msg_queue: Dict[str, dict] = {}
+        # 临时消息数组
+        self._upstream_tmp_msg: Dict[str, dict] = {}
         # Cycle类型的组件不仅要接收前面的组件的消息，并储存，还要另外的循环执行Cycle逻辑，因此消息的存储与消耗是需要用锁控制的
         self._upstream_msg_queue_lock: threading.Lock = None
+        #消息队列，用于下游组件
+        self._upstream_msg_queue: Queue = Queue(maxsize=1)
+        # 组件是否在execute
+        self._is_execute = False
         self.server = None
 
     def global_component_run(self):
@@ -337,44 +354,56 @@ class BaseDriver(abc.ABC):
     def build_msg_queue(self):
         '''为cycle组件构建消息数组，用于接收上游cycle组件的消息，如果有的话
         '''
-        self._upstream_msg_queue = {}
+        self._upstream_tmp_msg = {}
         self._upstream_msg_queue_lock = threading.Lock()
         for upstream in self._d_artifact:
             if upstream not in self._d_channels:  # 只考虑上游组件里的Cycle类型
-                self._upstream_msg_queue[upstream] = None
+                self._upstream_tmp_msg[upstream] = None
 
     def add_msg(self, key: str, msg_dict: dict):
         '''将某个上游cycle组件传来的消息放入队列里
         '''
+        is_change = False
+        #logger.logger.info(msg_dict)
+        #logger.logger.info(msg_dict['timestamp'])
         self._upstream_msg_queue_lock.acquire()
-        if self._upstream_msg_queue[key] is None:
-            self._upstream_msg_queue[key] = msg_dict
+        if self._upstream_tmp_msg[key] is None:
+            self._upstream_tmp_msg[key] = msg_dict
+            is_change = True
         else:
-            self._upstream_msg_queue[key] = msg_dict if msg_dict[
-                'timestamp'] > self._upstream_msg_queue[key][
-                    'timestamp'] else self._upstream_msg_queue[key]
+            #当上游组件是重发的时候，就需要比较timestamp，只有新的消息才会存储
+            #logger.logger.info("tmp:{}".format(self._upstream_tmp_msg[key]))
+            if msg_dict['timestamp'] > self._upstream_tmp_msg[key]['timestamp']:
+                self._upstream_tmp_msg[key] = msg_dict
+                is_change = True
+        if is_change:
+            if not self._upstream_msg_queue.empty():
+                try:
+                    self._upstream_msg_queue.get_nowait()
+                except:
+                    logger.logger.info("队列为空了，应该被组件取走了")
+            logger.logger.info("有上游新的消息：{}".format(self._upstream_tmp_msg))
+            self._upstream_msg_queue.put(copy.deepcopy(self._upstream_tmp_msg))
         self._upstream_msg_queue_lock.release()
+
         # self.show_queue()
 
     def pop_all_msg(self):
         '''获得目前的所有上游cycle类型的消息
         '''
-        self._upstream_msg_queue_lock.acquire()
-        result = self._upstream_msg_queue.copy()
-        for key in self._upstream_msg_queue:
-            self._upstream_msg_queue[key] = None
-        self._upstream_msg_queue_lock.release()
+        #这里如果没有消息就会block住
+        result = self._upstream_msg_queue.get()
         return result
 
     def show_queue(self):
-        for key, value in self._upstream_msg_queue.items():
+        for key, value in self._upstream_tmp_msg.items():
             logger.logger.info('{}:{}'.format(key, value))
 
     def start_server(self):
         '''为cycle组件启动一个server
         '''
-        self.server = HTTPServer(('0.0.0.0', global_config.SERVERPORT),
-                                 generate_handler(self))
+        self.server = ThreadingHTTPServer(
+            ('0.0.0.0', global_config.SERVERPORT), generate_handler(self))
         logger.logger.info('start server')
         threading.Thread(target=self.server.serve_forever).start()
 
@@ -399,24 +428,22 @@ class BaseDriver(abc.ABC):
     def send_channels(self, validated_channels: Dict):
         '''将经过验证的结果发送给后续cycle节点（如果有的话）
         '''
-
-        host_list = self.get_ip_by_label_func(
-            project=self._project,
-            task_name=self._pipeline_root[0],
-            model_name=self._pipeline_root[1],
-            component_id=self._component.id)
-        logger.logger.info('host_list: {}'.format(host_list))
-        while not all([x[0] for x in host_list]):
+        ensure = False
+        host_list = []
+        while not ensure:
             host_list = self.get_ip_by_label_func(
                 project=self._project,
                 task_name=self._pipeline_root[0],
                 model_name=self._pipeline_root[1],
-                component_id=self._component.id)
+                component_id=self._component.id,
+                namespace=self._executor.component_msg['resource_namespace'],
+                port=kfp_config.SERVERPORT)
             logger.logger.info('host_list: {}'.format(host_list))
+            if all([x[0] for x in host_list]):
+                ensure = True
             time.sleep(2)
 
         # 开始并发式的发送消息
-
         data = {
             'component': self._component.id,  # 标志一下是哪个component发的
             'timestamp':
@@ -427,7 +454,8 @@ class BaseDriver(abc.ABC):
         for host in host_list:
             # print('2222222')
             hosts.append('http://{ip}:{port}'.format(ip=host[0], port=host[1]))
-        httpUtil.asyncMsg(hosts,data,3)
+        httpUtil.asyncMsg(hosts, data, 3)
+
     def base_component_run(self):
         """普通组件的运行
         description
@@ -511,19 +539,21 @@ class BaseDriver(abc.ABC):
                 self.start_server()
                 logger.logger.info('启动server后继续执行')
                 while True:
-                    # 不断地获取消息
+                    # 获取消息
                     Cycle_Channels = self.get_upstream_component_Cycle_type_result(
                     )
-                    if Cycle_Channels is None:
-                        # 如果消息为None，则直接跳过
-                        logger.logger.info('暂时没有上游的消息，跳过执行')
-                        time.sleep(2)
-                        continue
+                    # if Cycle_Channels is None:
+                    #     # 如果消息为None，则直接跳过
+                    #     logger.logger.info('暂时没有上游的消息，跳过执行')
+                    #     time.sleep(2)
+                    #     continue
+                    self._is_execute = True
                     channel_result = self.execute(
                         {
                             **Do_Channels,
                             **Cycle_Channels
                         }, Artifacts)  # 获得运行的结果
+                    self._is_execute = False
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
@@ -592,16 +622,17 @@ class BaseDriver(abc.ABC):
         Cycle_Channels = {}
         msgs = self.pop_all_msg()
         if not any(msgs.values()):
-            logger.logger.info('Cycle_Channels没有消息')
+            logger.logger.info('Cycle_Channels没有消息:{}'.format(msgs))
             Cycle_Channels = None
         else:
+            logger.logger.info('Cycle_Channels有新消息：{}'.format(msgs))
             for cycleid, msg in msgs.items():
                 if msg:
                     msg.pop('timestamp')
                 Cycle_Channels[cycleid] = Channels(data=msg)
         return Cycle_Channels
 
-    def run(self, uni_op_mudule: str):
+    def run(self, uni_op_mudule: str = None):
         '''需要根据框架定义具体的执行逻辑
         description
         ---------
@@ -637,9 +668,10 @@ class BaseDriver(abc.ABC):
                          self._pipeline_root[1]))
         # 将pipeline的状态更新只running
         pipeline_utils.change_pipeline_phase_to_running(self._pipeline_id)
-        self._uniop = importlib.import_module(uni_op_mudule)
-        self.get_ip_by_label_func = getattr(self._uniop,
-                                            'get_ip_port_by_label')
+        # self._uniop = importlib.import_module(uni_op_mudule)
+        # self.get_ip_by_label_func = getattr(self._uniop,
+        #                                     'get_ip_port_by_label')
+        self.get_ip_by_label_func = k8s_ops.get_ip_port_by_label
 
         # self._uniop=__import__(uni_op_mudule)
         if type(self._component) == global_component.GlobalComponent:
