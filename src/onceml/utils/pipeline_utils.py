@@ -1,3 +1,4 @@
+from typing import List
 import onceml.utils.db as db
 import onceml.utils.cache as cache
 import onceml.utils.json_utils as json_utils
@@ -5,6 +6,42 @@ import onceml.components.base.base_component as base_component
 import onceml.components.base.global_component as global_component
 import onceml.types.phases as phases
 import os
+import onceml.global_config as global_config
+import onceml.types.component_msg as component_msg
+
+def parse_component_to_container_entrypoint(component: base_component,task_name:str, model_name:str,Do_deploytype:List[str]):
+    """将组建解析成容器运行时的序列化字符串
+    """
+    arguments = [
+        '--project', global_config.PROJECTDIRNAME, '--pipeline_root',
+        json_utils.simpleDumps([task_name, model_name]),
+        '--serialized_component',
+        json_utils.componentDumps(component)
+    ]
+    d_channels = {}  # 获取依赖的Do类型的组件的channel输出路径
+    d_artifact = {}  # 获取依赖的组件的artifact输出路径
+    for c in component.upstreamComponents:
+        if type(c)==global_component.GlobalComponent:
+            #如果是全局组件，他的目录就应该用真实的别名的组件的目录
+            if c.id in Do_deploytype:
+                d_channels[c.id] = os.path.join(
+                    c.artifact.url,
+                    component_msg.Component_Data_URL.CHANNELS.value)
+            d_artifact[c.id] = os.path.join(
+                c.artifact.url, component_msg.Component_Data_URL.ARTIFACTS.value)
+        else:
+            if c.id in Do_deploytype:
+                d_channels[c.id] = os.path.join(
+                    c.artifact.url,
+                    component_msg.Component_Data_URL.CHANNELS.value)
+            d_artifact[c.id] = os.path.join(
+                c.artifact.url, component_msg.Component_Data_URL.ARTIFACTS.value)
+    arguments = arguments + [
+        '--d_channels',
+        json_utils.simpleDumps(d_channels), '--d_artifact',
+        json_utils.simpleDumps(d_artifact)
+    ]
+    return arguments
 
 
 def generate_pipeline_id(task_name, model_name) -> str:
@@ -94,9 +131,15 @@ def db_get_pipeline_component_deploytype(task_name, model_name,
 
 
 def db_get_pipeline_component_phase(task_name, model_name, component):
-    '''通过数据库获取某个pipeline下某个组件的deploytype
+    '''通过数据库获取某个pipeline下某个组件的phase
     '''
     return db.select('.'.join([task_name, model_name, component, 'phase']))
+
+
+def db_reset_pipeline_component_phase(task_name, model_name, component):
+    '''通过数据库重置某个pipeline下某个组件的phase
+    '''
+    db.delete('.'.join([task_name, model_name, component, 'phase']))
 
 
 def compare_component(task_name, model_name,
@@ -114,25 +157,21 @@ def compare_component(task_name, model_name,
             component.setChanged(False)
 
 
-def recursive_get_global_component_alias_component(
-        task_name: str, model_name: str,
-        component: global_component.GlobalComponent):
+def recursive_get_global_component_alias_component(task_name: str,
+                                                   model_name: str,
+                                                   component_id: str):
     '''找到一个global_component所别名的最原始的那个组件
     '''
-    alias_model = db.select('.'.join(
-        [task_name, model_name, component.id, 'alias_model']))
-    alias_component = db.select('.'.join(
-        [task_name, model_name, component.id, 'alias_component']))
+
     while db.select('.'.join([
-            task_name, alias_model, alias_component, 'alias_model'
-    ])) is not None and db.select('.'.join([
-            task_name, alias_model, alias_component, 'alias_component'
-    ])) is not None:
-        alias_model = db.select('.'.join(
-            [task_name, alias_model, alias_component, 'alias_model']))
-        alias_component = db.select('.'.join(
-            [task_name, alias_model, alias_component, 'alias_component']))
-    return alias_model, alias_component
+            task_name, model_name, component_id, 'alias_model'
+    ])) is not None and db.select('.'.join(
+        [task_name, model_name, component_id, 'alias_component'])) is not None:
+        model_name = db.select('.'.join(
+            [task_name, model_name, component_id, 'alias_model']))
+        component_id = db.select('.'.join(
+            [task_name, model_name, component_id, 'alias_component']))
+    return model_name, component_id
 
 
 def change_pipeline_phase_to_created(pipeline_id: str):
@@ -197,18 +236,18 @@ def delete_pipeline_model_component_id(task_name: str, model_name: str):
     db.delete('.'.join([task_name, model_name, 'model_component']))
 
 
-def update_pipeline_model_component_id(preject_name: str, task_name: str,
+def update_pipeline_model_component_id(project_name: str, task_name: str,
                                        model_name: str,
                                        model_component_id: str):
     db.update(
         '.'.join([task_name, model_name, 'model_component']),
-        ".".join([preject_name, task_name, model_name, model_component_id]))
-def update_model_checkpoint(task_name: str,model_name: str,checkpoint:str):
-    db.update(
-        ".".join([task_name, model_name, 'model_checkpoint']),
-        checkpoint
-    )
-def get_model_checkpoint(task_name: str,model_name: str):
-    return db.select(
-        ".".join([task_name, model_name, 'model_checkpoint'])
-    )
+        ".".join([project_name, task_name, model_name, model_component_id]))
+
+
+def update_model_checkpoint(task_name: str, model_name: str, checkpoint: str):
+    db.update(".".join([task_name, model_name, 'model_checkpoint']),
+              checkpoint)
+
+
+def get_model_checkpoint(task_name: str, model_name: str):
+    return db.select(".".join([task_name, model_name, 'model_checkpoint']))

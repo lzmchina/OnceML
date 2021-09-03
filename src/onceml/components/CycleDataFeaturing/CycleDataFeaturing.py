@@ -123,7 +123,7 @@ class CycleDataFeaturing(BaseComponent):
             exception.TypeNotAllowedError("data_preprocess应该是BaseComponent的子类")
         super().__init__(executor=_executor,
                          inputs=[data_preprocess],
-                         checkpoint=channel.OutputChannel(str),
+                         checkpoint=channel.OutputChannel(int),
                          feature_func=feature_func,
                          **args)
         self.state = {"file_id": -1, "gen_id": -1}

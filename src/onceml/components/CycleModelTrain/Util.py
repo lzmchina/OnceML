@@ -13,8 +13,8 @@ _MAX_INT = sys.maxsize
 
 def checkModelList(taskname, modelList, records):
     '''获得需要请求的model list
-    本模型会记录每次调用的模型的checkpoint，初始值为-1，当模型需要训练时，可向数据库里查询modelList，如果他们的checkpoint全部大于本模型记录的checkpoint
-    说明他们有产生过模型，然后才能与他们通信
+    本模型会记录每次调用的模型的checkpoint，初始值为-1，当模型需要训练时，可向数据库里查询modelList，如果他们的checkpoint全部大于-1,
+    说明他们有产生过模型，然后才能与他们通信;否则就轮询，直到他们有模型
     '''
     logger.logger.info("开始搜索依赖的模型的checkpoint")
     while True:
@@ -29,13 +29,12 @@ def checkModelList(taskname, modelList, records):
             time.sleep(5)
 
 
-def diffFileList(exist_file_dir:str, req_file_list:list):
+def diffFileList(exist_file_dir: str, req_file_list: list):
     '''用来寻找需要处理的文件的list
     组件在收到集成模型的请求后，拿到file list，可以做一个diff，筛选一下
     '''
-    exist_files=os.listdir(exist_file_dir)
+    exist_files = os.listdir(exist_file_dir)
     return list(set(req_file_list).difference(set(exist_files)))
-    
 
 
 def getTimestampFilteredFile(dir, file_pattern, start_timestamp, end_timestamp,
@@ -44,24 +43,28 @@ def getTimestampFilteredFile(dir, file_pattern, start_timestamp, end_timestamp,
     '''
     file_name_pattern = re.compile(file_pattern)
     filtered_list = []
+    filtered_list_with_prefix = []
     if start_timestamp is None:
         start_timestamp = _MIN_INT
     if end_timestamp is None:
         end_timestamp = _MAX_INT
     for file in os.listdir(dir):
         if os.path.isfile(os.path.join(
-                dir, file)) and file_name_pattern.match(file):
+                dir, file)):
             timastamp_str, file_id = os.path.splitext(file)[0].split(
                 '-')[0], int(os.path.splitext(file)[0].split('-')[1])
             if timastamp_str == '':
                 if file_id <= end_file_id:
                     filtered_list.append(file)
+                    filtered_list_with_prefix.append(os.path.join(dir, file))
             else:
                 timestamp = int(timastamp_str)
                 if timestamp >= start_timestamp and timestamp <= end_timestamp:
                     if file_id <= end_file_id:
                         filtered_list.append(file)
-    return filtered_list
+                        filtered_list_with_prefix.append(
+                            os.path.join(dir, file))
+    return filtered_list_with_prefix,filtered_list
 
 
 def getEvalSampleFile(dir, file_pattern, start_file_id, end_file_id):
@@ -72,7 +75,7 @@ def getEvalSampleFile(dir, file_pattern, start_file_id, end_file_id):
     filtered_list = []
     for file in os.listdir(dir):
         if os.path.isfile(os.path.join(
-                dir, file)) and file_name_pattern.match(file):
+                dir, file)):
             id = int(os.path.splitext(file)[0].split('-')[1])
             if id > start_file_id and id <= end_file_id:
                 filtered_list_with_prefix.append(os.path.join(dir, file))
@@ -99,7 +102,8 @@ def getPodLabelValue(task_name, model_list):
 
 
 def getPodIpByLabel(label_dict: dict, namespace):
-    '''根据标签，获得对应pod的ip
+    '''根据标签，获得对应组件pod的ip
+    保证host里面每一个均是有效的ip，然后才返回
     '''
     model_hosts = {}
     for model, label in label_dict.items():

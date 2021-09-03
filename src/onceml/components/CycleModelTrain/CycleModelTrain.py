@@ -1,6 +1,6 @@
 from typing import Dict, List
 from onceml.components.base import BaseComponent, BaseExecutor
-from onceml.templates.ModelGenerator import ModelGenerator
+from onceml.templates import ModelGenerator
 from onceml.types.state import State
 import time
 import os
@@ -21,7 +21,7 @@ from http.server import BaseHTTPRequestHandler
 import onceml.configs.k8sConfig as k8sConfig
 import onceml.utils.pipeline_utils as pipeline_utils
 import onceml.utils.k8s_ops as k8s_ops
-from onceml.utils.http import asyncMsgByHost
+from onceml.utils.http import asyncMsg, asyncMsgByHost
 import onceml.global_config as global_config
 import json
 from threading import Thread, Lock
@@ -35,6 +35,8 @@ class _executor(BaseExecutor):
         self.data_dir = ""
         #存放收到的计算请求，记录每个组件的timestamp
         self.ensemble_requests = {}
+        #存放发出的计算请求，记录每个组件的timestamp，只有收到的反馈里的timestamp等于记录的tiestamp，才可以
+        self.ensemble_feedback_flag = {}
         #同步锁
         self.lock = Lock()
 
@@ -46,22 +48,29 @@ class _executor(BaseExecutor):
               input_artifacts: Dict[str, Artifact] = None):
         model_generator = None
         latest_checkpoint = state["model_checkpoint"]
+        current_file_id = state['current_file_id']
+        recieved_file_id = list(input_channels.values())[0]["checkpoint"]
+        if recieved_file_id <= current_file_id:
+            logger.info("特征工程的最新file id 没超过current_file_id")
+            return None
         if latest_checkpoint == -1:  #第一次训练，无需验证，也没有模型可以恢复
+            logger.info("第一次训练，无需验证，也没有模型可以恢复")
             model_generator: ModelGenerator = self.model_cls(None)
         else:
+            logger.info("从{}恢复模型".format(latest_checkpoint))
             model_generator: ModelGenerator = self.model_cls(
                 os.path.join(data_dir, 'checkpoints', str(latest_checkpoint)))
         samples_dir = list(input_artifacts.values())[0].url
 
         need_train = True
         if latest_checkpoint != -1:  #需要验证一下旧模型的效果
-            current_file_id = state['current_file_id']
+            logger.info("现在来验证上一个模型的效果")
             evalfiles_with_prefix, evalfiles = getEvalSampleFile(
-                samples_dir, '\d+-\d+.pkl', current_file_id,
-                list(input_channels.values())[0]["checkpoint"])
+                samples_dir, '\d+-\d+.pkl', current_file_id, recieved_file_id)
             ensemble_model_files = {}
             if len(self.emsemble_models) > 0:
                 #有集成模型，需要先获得这些模型的输出结果文件
+                logger.info("有集成依赖模型，需要先传递消息")
                 pickle.dump(
                     evalfiles,
                     open(os.path.join(data_dir, "evalfiles.pkl"), 'wb'))
@@ -82,17 +91,18 @@ class _executor(BaseExecutor):
                     ]
             need_train = model_generator.eval(evalfiles_with_prefix,
                                               ensemble_model_files)
-            state['current_file_id'] = list(
-                input_channels.values())[0]["checkpoint"]
+
         if need_train:
+            logger.info("现在来训练模型")
             ensemble_model_files = {}
             start_timestamp, end_timestamp = model_generator.filter()
-            filtered_list = getTimestampFilteredFile(
+            filtered_list_with_prefix, filtered_list = getTimestampFilteredFile(
                 samples_dir, '\d+-\d+.pkl', start_timestamp, end_timestamp,
-                list(input_channels.values())[0]["checkpoint"])
+                recieved_file_id)
 
             if len(self.emsemble_models) > 0:
                 #有集成模型，需要先获得这些模型的输出结果文件
+                logger.info("有集成模型，需要先获得这些模型的输出结果文件")
                 pickle.dump(
                     filtered_list,
                     open(os.path.join(data_dir, "trainfiles.pkl"), 'wb'))
@@ -104,7 +114,6 @@ class _executor(BaseExecutor):
                     save_dir=os.path.join(data_dir, 'ensemble_results'),
                     samples_dir=samples_dir)
                 #h会block住，直到集成的模型全部完成
-
                 for _ in self.emsemble_models:
                     model, checkpoint = self.ensemble_feedback_flag.get()
                     ensemble_model_files[model] = [
@@ -113,12 +122,17 @@ class _executor(BaseExecutor):
                         for file in filtered_list
                     ]
                     state["ensemble_model_checkpoint"][model] = checkpoint
-            model_generator.train(filtered_list, ensemble_model_files)
-            new_checkpoint = get_timestamp()
+            nees_retrain = model_generator.train(filtered_list_with_prefix,
+                                                 ensemble_model_files)
+            if nees_retrain:
+                logger.info("本次训练无效")
+                return None
+            new_checkpoint = str(get_timestamp())
             new_checkpoint_dir = os.path.join(data_dir, 'checkpoints',
                                               new_checkpoint)
             os.makedirs(new_checkpoint_dir, exist_ok=True)
             model_generator.model_save(new_checkpoint_dir)
+            state['current_file_id'] = recieved_file_id
             state["model_checkpoint"] = new_checkpoint
             updateModelCheckpointToDb(self.component_msg['task_name'],
                                       self.component_msg['model_name'],
@@ -138,7 +152,7 @@ class _executor(BaseExecutor):
         os.makedirs(os.path.join(data_dir, 'ensemble_results'), exist_ok=True)
         #在数据库里注册组件的信息
         pipeline_utils.update_pipeline_model_component_id(
-            preject_name=self.component_msg['pipeline_root'],
+            project_name=self.component_msg['project'],
             task_name=self.component_msg['task_name'],
             model_name=self.component_msg['model_name'],
             model_component_id=self.component_msg['component_id'])
@@ -160,9 +174,6 @@ class _executor(BaseExecutor):
         #need_use_model = model_list
         model_pod_label = getPodLabelValue(self.component_msg['task_name'],
                                            need_use_model)
-        model_hosts: list[str] = getPodIpByLabel(model_pod_label,
-                                                 resource_namespace)
-        logger.info("要通知的model host：{}".format(model_hosts.__str__))
         data = {
             "timestamp":
             get_timestamp(),
@@ -179,14 +190,25 @@ class _executor(BaseExecutor):
             "samples_dir":
             samples_dir
         }
-        logger.info('开始向要使用的模型发送消息：{}'.format(data))
-        #当集成的所有模型都已经完成，就会往这个队列塞一个元素，使得阻塞的线程能够继续
-        self.ensemble_feedback_flag.join()
+        for model in need_use_model:
+            self.ensemble_feedback_flag[model] = data['timestamp']
+        need_again_send = True
+        while need_again_send:
+            model_hosts: list[str] = getPodIpByLabel(model_pod_label,
+                                                     resource_namespace)
+            logger.info("要通知的model host：{}".format(model_hosts.__str__))
 
-        asyncMsgByHost([
-            "http://{}:{}/calculate".format(ip, global_config.SERVERPORT)
-            for ip in model_hosts
-        ], data)
+            logger.info('开始向要使用的模型发送消息：{}'.format(data))
+            #当集成的所有模型都已经完成，就会往这个队列塞一个元素，使得阻塞的线程能够继续
+            self.ensemble_feedback_flag.join()
+            try:
+                asyncMsg([
+                    "http://{}:{}/calculate".format(
+                        ip, global_config.SERVERPORT) for ip in model_hosts
+                ], data)
+                need_again_send = False
+            except:
+                logger.logger.error("发送失败")
 
     def calculate(self, msg: dict):
         '''实际的集成处理
@@ -196,7 +218,7 @@ class _executor(BaseExecutor):
         precess_file = msg['file']
         save_dir = msg['save_dir']
         resource_namespace = msg["resource_namespace"]
-        timestamp = msg['msg']
+        timestamp = msg['timestamp']
         samples_dir = msg['samples_dir']
         response_data = {}
         current_checkpoint = self.component_state['model_checkpoint']
@@ -205,7 +227,8 @@ class _executor(BaseExecutor):
             response_data = {
                 "flag": False,
                 "component": self.component_msg['model_name'],
-                "checkpoint": current_checkpoint
+                "checkpoint": current_checkpoint,
+                "timestamp": timestamp
             }
 
         else:
@@ -223,23 +246,29 @@ class _executor(BaseExecutor):
             model_generator: ModelGenerator = self.model_cls(
                 os.path.join(self.data_dir, 'checkpoints',
                              str(current_checkpoint)))
-            model_generator.predict(
-                [os.path.join(samples_dir, file) for file in final_files],
-                predict_output_dir)
+            model_generator.predict(samples_dir, final_files,
+                                    predict_output_dir)
             response_data = {
                 "flag": True,
                 "component": self.component_msg['model_name'],
-                "checkpoint": current_checkpoint
+                "checkpoint": current_checkpoint,
+                "timestamp": timestamp
             }
         model_pod_label = getPodLabelValue(self.component_msg['task_name'],
                                            [request_component])
-        model_hosts: list[str] = getPodIpByLabel(model_pod_label,
-                                                 resource_namespace)
-        logger.info("要通知的model host：{}".format(model_hosts.__str__))
-        asyncMsgByHost([
-            "http://{}:{}/feedback".format(ip, global_config.SERVERPORT)
-            for ip in model_hosts
-        ], response_data)
+        need_again_send = True
+        while need_again_send:
+            model_hosts: list[str] = getPodIpByLabel(model_pod_label,
+                                                     resource_namespace)
+            logger.info("要反馈的model host：{}".format(model_hosts.__str__))
+            try:
+                asyncMsg([
+                    "http://{}:{}/feedback".format(
+                        ip, global_config.SERVERPORT) for ip in model_hosts
+                ], response_data)
+                need_again_send = False
+            except:
+                logger.logger.error("发送失败")
 
     def POST_calculate(self, req_handler: BaseHTTPRequestHandler):
         '''负责接受其他模型的请求，对file list进行计算
@@ -250,19 +279,19 @@ class _executor(BaseExecutor):
         msg = dict(json.loads(post_data))
         logger.info("收到来自{}的计算请求".format(msg['component']))
         request_component = msg['component']
-        precess_file = msg['file']
-        save_dir = msg['save_dir']
-        resource_namespace = msg["resource_namespace"]
-        timestamp = msg['msg']
-        samples_dir = msg['samples_dir']
+
+        timestamp = msg['timestamp']
         before_checkpoint = self.ensemble_requests.get(request_component, None)
         if before_checkpoint is None:
             self.ensemble_requests[request_component] = timestamp
+            Thread(target=self.calculate, args=(msg, )).start()
         else:
             if before_checkpoint < timestamp:
                 #说明是新的计算请求，而不是因为组件的重发机制收到的重复计算请求
                 self.ensemble_requests[request_component] = timestamp
-                Thread(target=self.calculate, args=(msg,)).start()
+                Thread(target=self.calculate, args=(msg, )).start()
+            else:
+                logger.warning("收到重复的计算请求，忽略")
         req_handler.send_response(200)
         req_handler.send_header('Content-type', 'application/json')
         req_handler.end_headers()
@@ -277,12 +306,17 @@ class _executor(BaseExecutor):
         msg = dict(json.loads(post_data))
         recieved_component = msg['component']
         recieved_checkpoint = msg['checkpoint']
+        recieved_timestamp = msg['timestamp']
         logger.log("收到{}的计算完成回复，其使用的checkpoint为：{}".format(
             recieved_component, recieved_checkpoint))
-        self.ensemble_feedback_flag.put(
-            (recieved_component, recieved_checkpoint))
-        self.component_state["ensemble_model_checkpoint"][
-            recieved_component] = recieved_checkpoint
+        if self.ensemble_feedback_flag[
+                recieved_component] != recieved_timestamp:
+            logger.error("收到的计算反馈与当初发送的timestamp不一致")
+        else:
+            self.ensemble_feedback_flag.put(
+                (recieved_component, recieved_checkpoint))
+            self.component_state["ensemble_model_checkpoint"][
+                recieved_component] = recieved_checkpoint
         req_handler.send_response(200)
         req_handler.send_header('Content-type', 'application/json')
         req_handler.end_headers()
@@ -337,6 +371,6 @@ class CycleModelTrain(BaseComponent):
             "ensemble_model_checkpoint": {}
         }
         for model in emsemble_models:
-            #记录下依赖的模型的版本，当有新版本的模型产生时，才回去用新的模型去获得他们的结果
+            #记录下依赖的模型的版本
             #只有在收到feedback后，才会更新这个时间戳
             self.state['ensemble_model_checkpoint'][model] = -1

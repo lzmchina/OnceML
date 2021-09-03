@@ -8,7 +8,7 @@
 @version	:0.0.1
 '''
 import abc
-from types import List
+from typing import List
 class ModelServing(abc.ABC):
     def __init__(self,model_checkpoints:str):
         """

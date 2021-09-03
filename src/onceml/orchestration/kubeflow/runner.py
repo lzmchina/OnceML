@@ -151,7 +151,7 @@ class KubeflowRunner(BaseRunner):
         os.makedirs(output_path, exist_ok=True)
         file_name = pipeline.id + '.yaml'
         # self._parse_parameter_from_pipeline(pipeline)
-        self.allocate_component_artifact_url(pipeline=pipeline)
+        #self.allocate_component_artifact_url(pipeline=pipeline)
         pipeline.db_store()
         # 在kfp中创建本项目专属的nfs server与nfs svc
         kfp_ops.ensure_nfs_server(NFS_NAME=kfp_config.NFS_NAME,

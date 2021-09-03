@@ -36,6 +36,7 @@ import copy
 import onceml.utils.py_module_utils as py_module_utils
 import onceml.utils.http as httpUtil
 import onceml.utils.k8s_ops as k8s_ops
+import signal
 
 
 class BaseDriverRunType(Enum):
@@ -106,7 +107,7 @@ def generate_handler(driver_instance):
             '''
 
             #print(self.path)
-            logger.logger.debug(self.path)
+            #logger.logger.debug(self.path)
             #message = "Hello, World! Here is a GET response"
             #self.wfile.write(bytes(message, "utf8"))
             if self._route[BaseDriverApiType.GET.value].get(self.path,
@@ -220,7 +221,7 @@ class BaseDriver(abc.ABC):
         )
         self._executor.pod_label_value = '%s-%s-%s-%s' % (
             pipeline_root, pipeline_root[0], pipeline_root[1], component.id)
-        self._executor.component_msg["pipeline_root"] = pipeline_root
+        self._executor.component_msg["project"] = project
         self._executor.component_msg['task_name'] = pipeline_root[0]
         self._executor.component_msg['model_name'] = pipeline_root[1]
         self._executor.component_msg['component_id'] = component.id
@@ -382,7 +383,7 @@ class BaseDriver(abc.ABC):
                     self._upstream_msg_queue.get_nowait()
                 except:
                     logger.logger.info("队列为空了，应该被组件取走了")
-            logger.logger.info("有上游新的消息：{}".format(self._upstream_tmp_msg))
+            #logger.logger.info("有上游新的消息：{}".format(self._upstream_tmp_msg))
             self._upstream_msg_queue.put(copy.deepcopy(self._upstream_tmp_msg))
         self._upstream_msg_queue_lock.release()
 
@@ -402,6 +403,7 @@ class BaseDriver(abc.ABC):
     def start_server(self):
         '''为cycle组件启动一个server
         '''
+
         self.server = ThreadingHTTPServer(
             ('0.0.0.0', global_config.SERVERPORT), generate_handler(self))
         logger.logger.info('start server')
@@ -428,21 +430,6 @@ class BaseDriver(abc.ABC):
     def send_channels(self, validated_channels: Dict):
         '''将经过验证的结果发送给后续cycle节点（如果有的话）
         '''
-        ensure = False
-        host_list = []
-        while not ensure:
-            host_list = self.get_ip_by_label_func(
-                project=self._project,
-                task_name=self._pipeline_root[0],
-                model_name=self._pipeline_root[1],
-                component_id=self._component.id,
-                namespace=self._executor.component_msg['resource_namespace'],
-                port=kfp_config.SERVERPORT)
-            logger.logger.info('host_list: {}'.format(host_list))
-            if all([x[0] for x in host_list]):
-                ensure = True
-            time.sleep(2)
-
         # 开始并发式的发送消息
         data = {
             'component': self._component.id,  # 标志一下是哪个component发的
@@ -450,11 +437,33 @@ class BaseDriver(abc.ABC):
             time_utils.get_timestamp(),  # 写一下数据产生的时间，接收方只需要保存最新的即可，防止两边速度不一致
             **validated_channels
         }
-        hosts = []
-        for host in host_list:
-            # print('2222222')
-            hosts.append('http://{ip}:{port}'.format(ip=host[0], port=host[1]))
-        httpUtil.asyncMsg(hosts, data, 3)
+        need_again_send = True
+        while need_again_send:
+            ensure = False
+            host_list = []
+            while not ensure:
+                host_list = self.get_ip_by_label_func(
+                    project=self._project,
+                    task_name=self._pipeline_root[0],
+                    model_name=self._pipeline_root[1],
+                    component_id=self._component.id,
+                    namespace=self._executor.
+                    component_msg['resource_namespace'],
+                    port=kfp_config.SERVERPORT)
+                logger.logger.info('host_list: {}'.format(host_list))
+                if all([x[0] for x in host_list]):
+                    ensure = True
+                time.sleep(2)
+            hosts = []
+            for host in host_list:
+                # print('2222222')
+                hosts.append('http://{ip}:{port}'.format(ip=host[0],
+                                                         port=host[1]))
+            try:
+                httpUtil.asyncMsg(hosts, data, 3)
+                need_again_send = False
+            except:
+                logger.logger.error("发送失败")
 
     def base_component_run(self):
         """普通组件的运行
@@ -471,6 +480,9 @@ class BaseDriver(abc.ABC):
         -------
 
         """
+        #注册信号处理
+        for sig in [signal.SIGINT, signal.SIGTERM]:
+            signal.signal(sig, self.shutdownHandler)
         # 先获取上游节点中的Do类型的结果，因为这些都是已经确定的
         Do_Channels, Artifacts = self.get_upstream_component_Do_type_result()
         # 确保arifact目录存在
@@ -553,6 +565,11 @@ class BaseDriver(abc.ABC):
                             **Do_Channels,
                             **Cycle_Channels
                         }, Artifacts)  # 获得运行的结果
+                    if channel_result is None:
+                        # 如果消息为None，则直接跳过
+                        logger.logger.info('暂时没有需要发送至下游组件的消息，跳过执行')
+                        time.sleep(2)
+                        continue
                     self._is_execute = False
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
@@ -586,6 +603,14 @@ class BaseDriver(abc.ABC):
         except FileNotFoundError:
             logger.logger.warning('组件{}的目录已经不存在'.format(self._component.id))
         os.makedirs(component_dir, exist_ok=True)
+
+    def shutdownHandler(self, signalnum, frame):
+        '''组件在收到终止信号后，需要将数据库组件的一些状态信息清理
+        '''
+        logger.logger.warning('收到终止信号')
+        logger.logger.warning('开始清理组件的状态')
+        pipeline_utils.db_reset_pipeline_component_phase(self._pipeline_root[0],self._pipeline_root[1])
+        sys.exit(0)
 
     def restore_state(self, component_dir: str):
         '''恢复组件的状态，如果状态文件有的话

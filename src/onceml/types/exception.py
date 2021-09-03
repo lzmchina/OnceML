@@ -22,3 +22,5 @@ class NFCNotFoundError(Exception):
     pass
 class TypeNotAllowedError(Exception):
     pass
+class SendChannelError(Exception):
+    pass

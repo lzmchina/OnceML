@@ -14,6 +14,7 @@ import onceml.utils.pipeline_utils as pipeline_utils
 import onceml.types.component_msg as component_msg
 import onceml.configs.k8sConfig as k8sConfig
 
+
 def NFSContainerOp(pipeline_id: str):
     '''运行NFS的容器
     '''
@@ -76,28 +77,8 @@ class KfpComponent:
         -------
 
         """
-        arguments = [
-            '--project',global_config.PROJECTDIRNAME,
-            '--pipeline_root',
-            json_utils.simpleDumps([task_name, model_name]),
-            '--serialized_component',
-            json_utils.componentDumps(component)
-        ]
-        d_channels = {}  # 获取依赖的Do类型的组件的channel输出路径
-        d_artifact = {}  # 获取依赖的组件的artifact输出路径
-        for c in component.upstreamComponents:
-            if c.id in Do_deploytype:
-                d_channels[c.id] = os.path.join(
-                    c.artifact.url,
-                    component_msg.Component_Data_URL.CHANNELS.value)
-            d_artifact[c.id] = os.path.join(
-                c.artifact.url,
-                component_msg.Component_Data_URL.ARTIFACTS.value)
-        arguments = arguments + [
-            '--d_channels',
-            json_utils.simpleDumps(d_channels), '--d_artifact',
-            json_utils.simpleDumps(d_artifact)
-        ]
+        arguments = pipeline_utils.parse_component_to_container_entrypoint(
+            component, task_name, model_name, Do_deploytype)
         self.container_op = dsl.ContainerOp(
                 name=component.id,
                 command=kfp_config.COMMAND,
@@ -180,4 +161,3 @@ class KfpComponent:
             k8s_ops.client.V1EnvVar(name='{}ENV'.format(
                 global_config.project_name),
                                     value='INPOD'))
-        

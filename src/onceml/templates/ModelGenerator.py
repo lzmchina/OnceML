@@ -10,18 +10,21 @@
 '''
 
 import abc
-from types import List
-from typing import Dict, Tuple
+from typing import Dict, Tuple,List
+
+
 class ModelGenerator(abc.ABC):
     @abc.abstractmethod
-    def __init__(self,model_checkpoints:str=None):
+    def __init__(self, model_checkpoints: str = None):
         """
         description
         ---------
         在初始化时会初始化你的模型，供后续的训练、验证、预测
+        
         Args
         -------
         model_checkpoints:用于存放模型参数文件的目录，可以自行恢复模型，这里是直接传入最新timestamp的模型目录,如果没有，则是None
+        
         Returns
         -------
         
@@ -29,10 +32,11 @@ class ModelGenerator(abc.ABC):
         -------
         
         """
-        
+
         pass
+
     @abc.abstractmethod
-    def filter(self)->Tuple:
+    def filter(self) -> Tuple:
         """
         description
         ---------
@@ -49,10 +53,11 @@ class ModelGenerator(abc.ABC):
         -------
         
         """
-        
+
         pass
+
     @abc.abstractmethod
-    def train(self,file_list:List,ensemble_outout:Dict[str,list]):
+    def train(self, file_list: List, ensemble_outout: Dict[str, list]) -> bool:
         """
         description
         ---------
@@ -64,15 +69,17 @@ class ModelGenerator(abc.ABC):
         
         Returns
         -------
+        need_retrain:是否需要重新训练，可能训练后，自己验证会发现效果不好
         
         Raises
         -------
         
         """
-        
+
         pass
+
     @abc.abstractmethod
-    def model_save(self,model_checkpoints:str):
+    def model_save(self, model_checkpoints: str):
         """
         description
         ---------
@@ -89,15 +96,20 @@ class ModelGenerator(abc.ABC):
         -------
         
         """
-        
+
         pass
+
     @abc.abstractmethod
-    def predict(self,file_list:list,save_dir)->list:
+    def predict(self, file_dir:str,file_list: list, save_dir):
         """
         description
         ---------
         用于对外进行模型集成的服务,只需要将file_list视为需要，返回相应的结果即可
-        save_dir即为保存的目录
+        - file_dir:是待检测的文件的目录，用户需要自己进行拼接
+        - file_list:文件名的list，用户需要自己将file_dir拿过来拼接
+        - save_dir即为保存的目录
+        
+        
         Args
         -------
         
@@ -108,10 +120,11 @@ class ModelGenerator(abc.ABC):
         -------
         
         """
-        
+
         pass
+
     @abc.abstractmethod
-    def eval(self,file_list:List,ensemble_outout:Dict[str,list])->bool:
+    def eval(self, file_list: List, ensemble_outout: Dict[str, list]) -> bool:
         """
         description
         ---------
@@ -127,5 +140,5 @@ class ModelGenerator(abc.ABC):
         -------
         
         """
-        
+
         pass

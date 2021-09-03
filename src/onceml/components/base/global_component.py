@@ -34,8 +34,8 @@ class GlobalComponent(base.BaseComponent):
         -------
 
         """
-        self._alias_model_name = alias_model_name
-        self._alias_component_id = alias_component_id
+        self._alias_model_name = alias_model_name.lower()
+        self._alias_component_id = alias_component_id.lower()
         super().__init__(executor=base.BaseExecutor,
                          inputs=inputs,
                          shared=True)
