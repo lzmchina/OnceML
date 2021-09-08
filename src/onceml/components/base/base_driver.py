@@ -51,36 +51,14 @@ class BaseDriverApiType(Enum):
     DELETE = 'delete'
 
 
-def generate_handler(driver_instance):
+def generate_handler(driver_instance, route_rules: Dict[str, Dict[str,
+                                                                  object]]):
     class BaseHandler(BaseHTTPRequestHandler):
         default_request_version = "HTTP/1.1"
 
-        def generate_api(self, _executor: base_executor.BaseExecutor):
-            '''当_driver_instance里面有一些符合约定的函数名时，可以作为路由规则
-
-            post_***/POST_***……
-
-            第一个下划线当作分割符号，后面的下划线会转换成/符号
-
-            例如：
-
-            Post_test_data:会被解析为/test/data的post请求
-
-            GET_get_name:会被解析为/get/name的get请求
-            '''
-            for api_type in [e.value for e in BaseDriverApiType]:
-                self._route[api_type] = {}
-                func_names = py_module_utils.get_func_list_prefix(
-                    _executor, api_type)
-                for func in func_names:
-                    self._route[api_type][py_module_utils.parse_route(
-                        func.split('_', maxsplit=1)[1])] = getattr(
-                            _driver_instance._executor, func)
-
         def __init__(self, *args, **kwargs) -> None:
             self._driver_instance: BaseDriver = driver_instance
-            self._route = {}
-            self.generate_api(self._driver_instance._executor)
+            self._route = route_rules
             super(BaseHandler, self).__init__(*args, **kwargs)
 
         def _set_html_response(self):
@@ -405,7 +383,8 @@ class BaseDriver(abc.ABC):
         '''
 
         self.server = ThreadingHTTPServer(
-            ('0.0.0.0', global_config.SERVERPORT), generate_handler(self))
+            ('0.0.0.0', global_config.SERVERPORT),
+            generate_handler(self, self.generate_api(self._executor)))
         logger.logger.info('start server')
         threading.Thread(target=self.server.serve_forever).start()
 
@@ -609,7 +588,8 @@ class BaseDriver(abc.ABC):
         '''
         logger.logger.warning('收到终止信号')
         logger.logger.warning('开始清理组件的状态')
-        pipeline_utils.db_reset_pipeline_component_phase(self._pipeline_root[0],self._pipeline_root[1])
+        pipeline_utils.db_reset_pipeline_component_phase(
+            self._pipeline_root[0], self._pipeline_root[1])
         sys.exit(0)
 
     def restore_state(self, component_dir: str):
@@ -753,3 +733,31 @@ class BaseDriver(abc.ABC):
                                    self._component.artifact.url,
                                    Component_Data_URL.CHANNELS.value), 'w'),
                   indent=4)
+
+    def generate_api(
+        self, _executor: base_executor.BaseExecutor
+    ) -> Dict[str, Dict[str, object]]:
+        '''当_driver_instance里面有一些符合约定的函数名时，可以作为路由规则
+
+        post_***/POST_***……
+
+        第一个下划线当作分割符号，后面的下划线会转换成/符号
+
+        例如：
+
+        Post_test_data:会被解析为/test/data的post请求
+
+        GET_get_name:会被解析为/get/name的get请求
+        '''
+        route_rules = {}
+        for api_type in [e.value for e in BaseDriverApiType]:
+            route_rules[api_type] = {}
+            func_names = py_module_utils.get_func_list_prefix(
+                _executor, api_type)
+            logger.logger.info("发现的符合路由规则的函数名：{}".format(func_names))
+            for func in func_names:
+                route_rules[api_type][py_module_utils.parse_route(
+                    func.split('_',
+                               maxsplit=1)[1])] = getattr(_executor, func)
+        logger.logger.info("当前的自定义路由：{}".format(route_rules))
+        return route_rules

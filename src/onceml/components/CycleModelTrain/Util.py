@@ -21,6 +21,8 @@ def checkModelList(taskname, modelList, records):
         need_use = []
         for model in modelList:
             latest_checkpoint = getModelCheckpointFromDb(taskname, model)
+            logger.logger.info("模型：{} 的最新checkpoint为{}".format(
+                model, latest_checkpoint))
             if latest_checkpoint > -1:
                 need_use.append(model)
         if len(need_use) == len(modelList):
@@ -49,8 +51,7 @@ def getTimestampFilteredFile(dir, file_pattern, start_timestamp, end_timestamp,
     if end_timestamp is None:
         end_timestamp = _MAX_INT
     for file in os.listdir(dir):
-        if os.path.isfile(os.path.join(
-                dir, file)):
+        if os.path.isfile(os.path.join(dir, file)):
             timastamp_str, file_id = os.path.splitext(file)[0].split(
                 '-')[0], int(os.path.splitext(file)[0].split('-')[1])
             if timastamp_str == '':
@@ -64,7 +65,7 @@ def getTimestampFilteredFile(dir, file_pattern, start_timestamp, end_timestamp,
                         filtered_list.append(file)
                         filtered_list_with_prefix.append(
                             os.path.join(dir, file))
-    return filtered_list_with_prefix,filtered_list
+    return filtered_list_with_prefix, filtered_list
 
 
 def getEvalSampleFile(dir, file_pattern, start_file_id, end_file_id):
@@ -74,8 +75,7 @@ def getEvalSampleFile(dir, file_pattern, start_file_id, end_file_id):
     filtered_list_with_prefix = []
     filtered_list = []
     for file in os.listdir(dir):
-        if os.path.isfile(os.path.join(
-                dir, file)):
+        if os.path.isfile(os.path.join(dir, file)):
             id = int(os.path.splitext(file)[0].split('-')[1])
             if id > start_file_id and id <= end_file_id:
                 filtered_list_with_prefix.append(os.path.join(dir, file))
@@ -93,6 +93,7 @@ def getPodLabelValue(task_name, model_list):
         while not ensure:
             component_id = pipeline_utils.get_pipeline_model_component_id(
                 task_name=task_name, model_name=model)
+            logger.logger.info("模型：{} 的模型组件为：{}".format(model, component_id))
             if component_id is not None:
                 ensure = True
                 model_pod_label[model] = component_id
@@ -109,16 +110,20 @@ def getPodIpByLabel(label_dict: dict, namespace):
     for model, label in label_dict.items():
         ensure = False
         while not ensure:
+            logger.logger.info("{}={}".format(k8sConfig.COMPONENT_POD_LABEL,
+                                              label))
             pod_list = k8s_ops.get_pods_by_label(
                 namespace=namespace,
                 label_selector="{}={}".format(k8sConfig.COMPONENT_POD_LABEL,
                                               label))
             host_list = [pod.status.pod_ip for pod in pod_list]
+            logger.logger.info("模型：{} 的模型组件host为：{}".format(
+                model, ",".join(host_list)))
             if len(host_list) > 0 and all([x[0] for x in host_list]):
                 ensure = True
                 model_hosts[model] = host_list[0]
             else:
-                time.sleep(2)
+                time.sleep(5)
     return model_hosts
 
 
@@ -129,10 +134,9 @@ def updateModelCheckpointToDb(task_name, model, checkpoint: int):
 
 
 def getModelCheckpointFromDb(task_name, model):
-    '''将模型的最新checkpoint更新到数据库里
+    '''获取数据库里某个task的模型最新checkpoint
     '''
-    checkpoint = pipeline_utils.get_model_checkpoint(task_name, model,
-                                                     str(checkpoint))
+    checkpoint = pipeline_utils.get_model_checkpoint(task_name, model)
     if checkpoint is None:
         return -1
     else:

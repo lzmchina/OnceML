@@ -9,6 +9,6 @@ PROJECTDIR = os.getcwd()
 PROJECTDIRNAME = os.path.split(PROJECTDIR)[1]
 # 当前运行项目的父路径
 # PROJECTPARENtDIR = os.path.split(PROJECTDIR)[0]
-database_file = path.join(PROJECTDIR, database_dir,
+database_file = path.join(PROJECTDIR,OUTPUTSDIR, database_dir,
                           '{}.db'.format(project_name))
 SERVERPORT = 10086

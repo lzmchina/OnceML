@@ -23,8 +23,7 @@ def signal_handler(sig, frame):
 for sig in [signal.SIGINT, signal.SIGTERM]:
     print(sig)
     signal.signal(sig, shutdownFunction)
-while True:
-    a=5+5
+
 class myHandler(BaseHTTPRequestHandler):
     #Handler for the GET requests
     count = 0
@@ -38,6 +37,7 @@ class myHandler(BaseHTTPRequestHandler):
             myHandler.count).encode("utf-8"))
         myHandler.count += 1
         Thread(target=time.sleep, args=(10, )).start()
+        raise Exception
         print("xdxdx")
 
 

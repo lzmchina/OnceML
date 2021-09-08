@@ -12,10 +12,10 @@ def get_func_list_prefix(obj:object,prefix:str):
     '''通过一个字符串前缀，获取所有包含此前缀的方法函数名
     '''
     methodList = []
-    for method_name in dir(object):
+    for method_name in dir(obj):
         if method_name.lower().startswith(prefix):
             try:
-                if callable(getattr(object, method_name)):
+                if callable(getattr(obj, method_name)):
                     methodList.append(str(method_name))
             except:
                 methodList.append(str(method_name))

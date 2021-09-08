@@ -154,7 +154,7 @@ class KfpComponent:
         # 给pod添加label，方便后续的查询,value为{task name}_{model name}_{component id}
         self.container_op.add_pod_label(
             name=k8sConfig.COMPONENT_POD_LABEL,
-            value=('%s-%s-%s-%s' % (global_config.PROJECTDIRNAME, task_name,
+            value=(k8sConfig.COMPONENT_POD_LABEL_VALUE.format(global_config.PROJECTDIRNAME, task_name,
                                     model_name, component.id)))
         #加入环境变量，方便pod里的程序能够使用api
         self.container_op.container.add_env_variable(

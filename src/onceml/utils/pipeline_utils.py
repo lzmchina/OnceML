@@ -100,6 +100,7 @@ def db_update_pipeline_component(task_name, model_name,
               component.deploytype)  # 标记组件的deploytype
     db.update('.'.join([task_name, model_name, component.id, 'alias_model']),
               getattr(component, 'alias_model_name', None))  # 标记组件的依赖信息
+    print(getattr(component, 'alias_model_name', None), getattr(component, 'alias_component_id', None))
     db.update('.'.join(
         [task_name, model_name, component.id, 'alias_component']),
               getattr(component, 'alias_component_id', None))  # 标记组件的依赖信息
@@ -162,15 +163,17 @@ def recursive_get_global_component_alias_component(task_name: str,
                                                    component_id: str):
     '''找到一个global_component所别名的最原始的那个组件
     '''
-
     while db.select('.'.join([
             task_name, model_name, component_id, 'alias_model'
     ])) is not None and db.select('.'.join(
         [task_name, model_name, component_id, 'alias_component'])) is not None:
-        model_name = db.select('.'.join(
+        new_model_name = db.select('.'.join(
             [task_name, model_name, component_id, 'alias_model']))
-        component_id = db.select('.'.join(
+        new_component_id = db.select('.'.join(
             [task_name, model_name, component_id, 'alias_component']))
+        model_name,component_id=new_model_name,new_component_id
+        
+        
     return model_name, component_id
 
 
