@@ -97,16 +97,20 @@ class BaseComponent(Jsonable):
         self._downstreamComponents = set()
         #cache机制，判断当前组件是否与之前的组件有所变动,默认改变了，需要删除之前的数据
         self._changed = True
-        self._namespace=""
+        self._namespace = None
+
     @property
     def inputs(self):
         return self._dependentComponent
+
     @property
     def resourceNamepace(self):
         return self._namespace
+
     @resourceNamepace.setter
-    def resourceNamepace(self,namespace:str):
-        self._namespace=namespace
+    def resourceNamepace(self, namespace: str):
+        self._namespace = namespace
+
     @property
     def outputs(self):
         return self._channel
@@ -217,4 +221,4 @@ class BaseComponent(Jsonable):
 
     @state.setter
     def state(self, json2state: Dict[str, Any]) -> None:
-        self._state=State(data=json2state)
+        self._state = State(data=json2state)

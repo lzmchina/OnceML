@@ -89,6 +89,7 @@ class _executor(BaseExecutor):
                         os.path.join(data_dir, 'ensemble_results', model,
                                      checkpoint, file) for file in evalfiles
                     ]
+                    self.ensemble_feedback_queue.task_done()
             need_train = model_generator.eval(evalfiles_with_prefix,
                                               ensemble_model_files)
 
@@ -122,6 +123,7 @@ class _executor(BaseExecutor):
                         for file in filtered_list
                     ]
                     state["ensemble_model_checkpoint"][model] = checkpoint
+                    self.ensemble_feedback_queue.task_done()
             nees_retrain = False
             try:
 
@@ -200,6 +202,7 @@ class _executor(BaseExecutor):
 
             logger.info('开始向要使用的模型发送消息：{}'.format(data))
             #当集成的所有模型都已经完成，就会往这个队列塞一个元素，使得阻塞的线程能够继续
+            logger.info("现在队列里元素个数".format(self.ensemble_feedback_queue.all_tasks_done()))
             self.ensemble_feedback_queue.join()
             try:
                 asyncMsg([
