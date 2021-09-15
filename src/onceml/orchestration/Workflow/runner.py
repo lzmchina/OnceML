@@ -1,13 +1,21 @@
+from collections import OrderedDict
+from typing import Dict
 from onceml.orchestration.runner import BaseRunner
 from onceml.orchestration import Pipeline
 import onceml.utils.pipeline_utils as pipeline_utils
 import os
 import onceml.global_config as global_config
+from onceml.orchestration.Workflow.component import OnceMLComponent
+from onceml.orchestration.Workflow.types import Workflow
+from onceml.components.base import BaseComponent
+import yaml
+import kubernetes.utils as k8s_utils
 
 
 class OnceMLRunner(BaseRunner):
     def __init__(self,
-                 pvc: str = None,
+                 pvc: str,
+                 project_name: str,
                  docker_image: str = None,
                  namespace: str = "onceml"):
         """负责将一个pipeline转换成OnceML workflow资源
@@ -41,15 +49,15 @@ class OnceMLRunner(BaseRunner):
                                         global_config.OUTPUTSDIR)
         self.docker_image = docker_image
         self.namespace = namespace
+        self.pvcname = pvc
+        self.project_name = project_name
         os.makedirs(os.path.join(self._output_dir, 'yamls'), exist_ok=True)
 
-    def _construct_pipeline_graph(self, pipeline: Pipeline):
-        """Constructs a Kubeflow Pipeline graph.
-        Args:
-        pipeline: The logical TFX pipeline to base the construction on.
-        pipeline_root: dsl.PipelineParam representing the pipeline root."""
+    def construct_pipeline_graph(
+            self, pipeline: Pipeline) -> Dict[str, OnceMLComponent]:
+        """
+        """
         component_to_kfp_op = {}
-        # component_to_kfp_op['nfs']=Kfp_component.NFSContainerOp(pipeline.id)
         for component in pipeline.components:
             # 分配namespace
             component.resourceNamepace = self.namespace
@@ -60,32 +68,45 @@ class OnceMLRunner(BaseRunner):
                     Do_deploytype.append(upstreamComponent.id)
                 depends_on[upstreamComponent.id] = component_to_kfp_op[
                     upstreamComponent.id]
-            kfp_component = Kfp_component.KfpComponent(
+            workflow_component = OnceMLComponent(
                 task_name=pipeline._task_name,
                 model_name=pipeline._model_name,
-                pipeline_root=pipeline.rootdir,
                 component=component,
-                depends_on=depends_on,
                 Do_deploytype=Do_deploytype,
-                docker_image=self.docker_image)
-            component_to_kfp_op[component.id] = kfp_component.container_op
+                pvc_name=self.pvcname,
+                project_name=self.project_name)
+            component_to_kfp_op[component.id] = workflow_component
+        return component_to_kfp_op
 
     def deploy(self, pipeline: Pipeline):
-        '''将一个pipeline编译成kubeflow的yaml资源,并提交
+        '''将一个pipeline编译成workfow的yaml资源,并提交(optional)
 
         '''
         output_path = os.path.join(self._output_dir, pipeline.rootdir)
         os.makedirs(output_path, exist_ok=True)
-        file_name = pipeline.id + '.yaml'
+        file_name = pipeline.id + '.test.yaml'
 
-        pipeline.db_store()
-        # 在kfp中创建本项目专属的nfs server与nfs svc
-
+        #pipeline.db_store()
         # 编译成workflow资源
+        workflow = Workflow("{project}.{}".format(pipeline.id,
+                                                  project=self.project_name))
+        for c in self.construct_pipeline_graph(pipeline=pipeline).values():
+            workflow.add_component(c.containerop)
+        for layer in pipeline.layerComponents:
+            dag_layer = []
+            for component in layer:
+                dag_layer.append({
+                    "name": component.id,
+                    "deployType": component.deploytype
+                })
+            workflow.add_dag_layer(dag_layer)
 
+        print(
+            yaml.dump(
+                workflow.to_dict(),
+                open(os.path.join(self._output_dir, 'yamls', file_name), "w")))
         # 对数据库中的信息进行更新
-        self.db_store(pipeline)
-        # 在kfp中创建运行相应的pipeline，并且将其归属于kfp_config.EXPERIMENT中
+        #self.db_store(pipeline)
 
     def db_store(self, pipeline: Pipeline):
         '''将phase更新
@@ -94,3 +115,36 @@ class OnceMLRunner(BaseRunner):
         for c in pipeline.components:
             pipeline_utils.change_components_phase_to_created(
                 pipeline_id=pipeline.id, component_id=c.id)
+
+
+def dump_yaml(data):
+    #See https://stackoverflow.com/questions/5121931/in-python-how-can-you-load-yaml-mappings-as-ordereddicts/21912744#21912744
+
+    def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
+        class OrderedDumper(Dumper):
+            pass
+
+        def _dict_representer(dumper, data):
+            return dumper.represent_mapping(
+                yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, data.items())
+
+        OrderedDumper.add_representer(OrderedDict, _dict_representer)
+        OrderedDumper.add_representer(dict, _dict_representer)
+
+        #Hack to force the code (multi-line string) to be output using the '|' style.
+        def represent_str_or_text(self, data):
+            style = None
+            if data.find('\n') >= 0:  #Multiple lines
+                #print('Switching style for multiline text:' + data)
+                style = '|'
+            if data.lower() in [
+                    'y', 'n', 'yes', 'no', 'true', 'false', 'on', 'off'
+            ]:
+                style = '"'
+            return self.represent_scalar(u'tag:yaml.org,2002:str', data, style)
+
+        OrderedDumper.add_representer(str, represent_str_or_text)
+
+        return yaml.dump(data, stream, OrderedDumper, **kwds)
+
+    return ordered_dump(data, default_flow_style=None)

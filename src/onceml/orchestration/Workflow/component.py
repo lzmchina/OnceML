@@ -14,17 +14,14 @@ class OnceMLComponent:
 
     将pipeline的组件转化至OnceMLComponent，包含执行的命令、使用的镜像、挂载的pv等信息
     '''
-    def __init__(
-        self,
-        task_name: str,
-        model_name: str,
-        component: base_component.BaseComponent,
-        depends_on: Dict[str, Containerop],
-        Do_deploytype: List[str],
-        service_account: str,
-        pvc_name: str,
-        docker_image: str = None,
-    ):
+    def __init__(self,
+                 task_name: str,
+                 model_name: str,
+                 component: base_component.BaseComponent,
+                 Do_deploytype: List[str],
+                 pvc_name: str,
+                 docker_image: str = None,
+                 project_name: str = None):
         """onceml component的表示
         description
         ---------
@@ -50,9 +47,12 @@ class OnceMLComponent:
 
         """
         arguments = pipeline_utils.parse_component_to_container_entrypoint(
-            component, task_name, model_name, Do_deploytype)
-        self.containerop = Containerop()
-        self.containerop.name = component.id
+            component,
+            task_name,
+            model_name,
+            Do_deploytype,
+            project_name=project_name)
+        self.containerop = Containerop(component.id)
         self.containerop.container.command = podconfigs.COMMAND
         self.containerop.container.args = arguments
         self.containerop.container.image = docker_image or podconfigs.IMAGE
@@ -82,7 +82,8 @@ class OnceMLComponent:
                             component=c)
                     self.containerop.add_pod_label(
                         name=k8sConfig.COMPONENT_SENDER_POD_LABEL.format(
-                            project=global_config.PROJECTDIRNAME,
+                            project=project_name
+                            or global_config.PROJECTDIRNAME,
                             task=task_name,
                             model=_model_name,
                             component=_com_id),
@@ -97,8 +98,8 @@ class OnceMLComponent:
         self.containerop.add_pod_label(
             name=k8sConfig.COMPONENT_POD_LABEL,
             value=(k8sConfig.COMPONENT_POD_LABEL_VALUE.format(
-                global_config.PROJECTDIRNAME, task_name, model_name,
-                component.id)))
+                project_name or global_config.PROJECTDIRNAME, task_name,
+                model_name, component.id)))
         #加入环境变量，方便pod里的程序能够使用api
         self.containerop.container.env = [
             V1EnvVar(name='{}ENV'.format(global_config.project_name),

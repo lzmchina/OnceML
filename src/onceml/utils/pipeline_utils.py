@@ -9,33 +9,41 @@ import os
 import onceml.global_config as global_config
 import onceml.types.component_msg as component_msg
 
-def parse_component_to_container_entrypoint(component: base_component,task_name:str, model_name:str,Do_deploytype:List[str]):
+
+def parse_component_to_container_entrypoint(component: base_component,
+                                            task_name: str,
+                                            model_name: str,
+                                            Do_deploytype: List[str],
+                                            project_name=None):
     """将组建解析成容器运行时的序列化字符串
     """
     arguments = [
-        '--project', global_config.PROJECTDIRNAME, '--pipeline_root',
-        json_utils.simpleDumps([task_name, model_name]),
-        '--serialized_component',
+        '--project', project_name or global_config.PROJECTDIRNAME,
+        '--pipeline_root',
+        json_utils.simpleDumps([task_name,
+                                model_name]), '--serialized_component',
         json_utils.componentDumps(component)
     ]
     d_channels = {}  # 获取依赖的Do类型的组件的channel输出路径
     d_artifact = {}  # 获取依赖的组件的artifact输出路径
     for c in component.upstreamComponents:
-        if type(c)==global_component.GlobalComponent:
+        if type(c) == global_component.GlobalComponent:
             #如果是全局组件，他的目录就应该用真实的别名的组件的目录
             if c.id in Do_deploytype:
                 d_channels[c.id] = os.path.join(
                     c.artifact.url,
                     component_msg.Component_Data_URL.CHANNELS.value)
             d_artifact[c.id] = os.path.join(
-                c.artifact.url, component_msg.Component_Data_URL.ARTIFACTS.value)
+                c.artifact.url,
+                component_msg.Component_Data_URL.ARTIFACTS.value)
         else:
             if c.id in Do_deploytype:
                 d_channels[c.id] = os.path.join(
                     c.artifact.url,
                     component_msg.Component_Data_URL.CHANNELS.value)
             d_artifact[c.id] = os.path.join(
-                c.artifact.url, component_msg.Component_Data_URL.ARTIFACTS.value)
+                c.artifact.url,
+                component_msg.Component_Data_URL.ARTIFACTS.value)
     arguments = arguments + [
         '--d_channels',
         json_utils.simpleDumps(d_channels), '--d_artifact',
@@ -100,7 +108,8 @@ def db_update_pipeline_component(task_name, model_name,
               component.deploytype)  # 标记组件的deploytype
     db.update('.'.join([task_name, model_name, component.id, 'alias_model']),
               getattr(component, 'alias_model_name', None))  # 标记组件的依赖信息
-    print(getattr(component, 'alias_model_name', None), getattr(component, 'alias_component_id', None))
+    print(getattr(component, 'alias_model_name', None),
+          getattr(component, 'alias_component_id', None))
     db.update('.'.join(
         [task_name, model_name, component.id, 'alias_component']),
               getattr(component, 'alias_component_id', None))  # 标记组件的依赖信息
@@ -171,9 +180,8 @@ def recursive_get_global_component_alias_component(task_name: str,
             [task_name, model_name, component_id, 'alias_model']))
         new_component_id = db.select('.'.join(
             [task_name, model_name, component_id, 'alias_component']))
-        model_name,component_id=new_model_name,new_component_id
-        
-        
+        model_name, component_id = new_model_name, new_component_id
+
     return model_name, component_id
 
 

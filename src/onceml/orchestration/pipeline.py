@@ -145,7 +145,7 @@ class Pipeline():
         return self._components
 
     @property
-    def layerComponents(self):
+    def layerComponents(self) -> List[List[BaseComponent]]:
         """pipeline的组件
 
         这些组件按照设置的逻辑拓扑排列,并且会分层
@@ -183,7 +183,7 @@ class Pipeline():
 
         所以这里进行一个判断
         '''
-        for index, layer in enumerate(self._layersComponents):
+        for index, layer in enumerate(self.layerComponents):
             logger.info('第 %d 层' % index)
             for component in layer:
                 logger.info('component id %s' % component.id)

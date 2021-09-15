@@ -1,8 +1,11 @@
+from typing import List
+
+
 class InvalidDAGError(Exception):
     """Error to indicate invalid DAG."""
 
 
-def topsorted_layers(nodes, get_node_id_fn, get_parent_nodes, get_child_nodes):
+def topsorted_layers(nodes, get_node_id_fn, get_parent_nodes, get_child_nodes)->List[List]:
     """Sorts the DAG of nodes in topological order.
     Args:
     nodes: A sequence of nodes.
