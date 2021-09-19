@@ -12,10 +12,12 @@ class Container():
         self.env: list[V1EnvVar] = None
         self.image: str = None
         self.ports: list[V1ContainerPort] = None
-        self.volume_mounts: list[V1VolumeMount] = None
-        self.working_dir:str=None
+        self.volumeMounts: list[V1VolumeMount] = None
+        self.workingDir: str = None
+
     def to_dict(self):
         return self.__dict__
+
 
 class Containerop():
     def __init__(self, name: str):

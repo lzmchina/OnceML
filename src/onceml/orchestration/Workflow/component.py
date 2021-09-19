@@ -56,8 +56,8 @@ class OnceMLComponent:
         self.containerop.container.command = podconfigs.COMMAND
         self.containerop.container.args = arguments
         self.containerop.container.image = docker_image or podconfigs.IMAGE
-        self.containerop.container.working_dir = podconfigs.WORKINGDIR,
-        self.containerop.container.volume_mounts = [
+        self.containerop.container.workingDir = podconfigs.WORKINGDIR
+        self.containerop.container.volumeMounts = [
             V1VolumeMount(name=pvc_name, mount_path=podconfigs.WORKINGDIR)
         ]
         if component.deploytype == 'Cycle':
