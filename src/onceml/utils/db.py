@@ -19,20 +19,20 @@ def close_db(db_connector):
 
 
 def delete(key):
-    db_connector = init_db(global_config.database_file)
+    db_connector = init_db(_path)
     if db_connector.get(key):
         db_connector.delete(key)
 
 
 def update(key, value):
-    db_connector = init_db(global_config.database_file)
+    db_connector = init_db(_path)
     if value is None:
         return
     db_connector.update(key, value)
 
 
 def select(key):
-    db_connector = init_db(global_config.database_file)
+    db_connector = init_db(_path)
     result = None
     if db_connector.get(key):
         result = db_connector.get(key)

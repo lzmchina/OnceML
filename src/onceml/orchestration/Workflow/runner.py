@@ -86,7 +86,7 @@ class OnceMLRunner(BaseRunner):
         os.makedirs(output_path, exist_ok=True)
         file_name = pipeline.id + '.test.yaml'
 
-        #pipeline.db_store()
+        pipeline.db_store()
         # 编译成workflow资源
         workflow = Workflow("{project}.{}".format(pipeline.id,
                                                   project=self.project_name))

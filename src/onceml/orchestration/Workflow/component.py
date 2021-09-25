@@ -97,9 +97,9 @@ class OnceMLComponent:
         # 给pod添加label，方便后续的查询,value为{task name}_{model name}_{component id}
         self.containerop.add_pod_label(
             name=k8sConfig.COMPONENT_POD_LABEL,
-            value=(k8sConfig.COMPONENT_POD_LABEL_VALUE.format(
+            value=k8sConfig.COMPONENT_POD_LABEL_VALUE.format(
                 project_name or global_config.PROJECTDIRNAME, task_name,
-                model_name, component.id)))
+                model_name, component.id))
         #加入环境变量，方便pod里的程序能够使用api
         self.containerop.container.env = [
             V1EnvVar(name='{}ENV'.format(global_config.project_name),
