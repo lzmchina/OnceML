@@ -589,7 +589,7 @@ class BaseDriver(abc.ABC):
         logger.logger.warning('收到终止信号')
         logger.logger.warning('开始清理组件的状态')
         pipeline_utils.db_reset_pipeline_component_phase(
-            self._pipeline_root[0], self._pipeline_root[1])
+            self._pipeline_root[0], self._pipeline_root[1],self._component.id)
         sys.exit(0)
 
     def restore_state(self, component_dir: str):
@@ -720,8 +720,6 @@ class BaseDriver(abc.ABC):
                     except:
                         raise TypeError('{}的类型为{},且无法强制转化'.format(
                             key, type(value)))
-            else:
-                data.pop(key)
         return data
 
     def store_channels(self, validated_channels: Dict[str, Any]):

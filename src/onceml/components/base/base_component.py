@@ -30,6 +30,7 @@ class BaseComponent(Jsonable):
 
     总结一下：Channel、Artifact是在运行过程中产生的数据结构；param是在运行前设置好的参数；组件的inputs是依赖的组件，outputs是返回组件的channel、artifact
     """
+
     def __init__(self,
                  executor: BaseExecutor.__class__,
                  inputs: Optional[List] = None,
@@ -68,9 +69,9 @@ class BaseComponent(Jsonable):
         for c in self._dependentComponent:
             if not isinstance(c, BaseComponent):
                 raise TypeError('inputs必须是BaseComponent类或子类')
-        #组件运行前传入的静态参数
+        # 组件运行前传入的静态参数
         self._params = {}
-        #组件运行中产生的结果
+        # 组件运行中产生的结果
         self._channel = {}
         for key, value in args.items():
             if type(value) == OutputChannel:  # 组件的Channels
@@ -81,7 +82,7 @@ class BaseComponent(Jsonable):
         self._artifact = Artifact()
         # 组件状态
         self._state = State()
-        #组件是否会共享
+        # 组件是否会共享
         self._datashared = shared
         # 找到依赖的组件后，就该将他们的channel、artifact加入进来，这个具体的由pipeline操作
         self._dependentChannels = {}
@@ -89,15 +90,27 @@ class BaseComponent(Jsonable):
         # 拿到executor class
         self._executor_cls = executor
         self._deploytype = None
-        #检查executor class是否只重写了一个函数
+        # 检查executor class是否只重写了一个函数
         # if (bool(self._executor_cls.Do==BaseExecutor.Do)==bool(self._executor_cls.Cycle==BaseExecutor.Cycle)):
         #     raise  SyntaxError('Do与Cycle必须有且只能有一个被重写')
-        #当前节点的上游节点与下游节点
+        # 组件在拓扑DAG里面第几层
+        self._topoLayerIndex = -1
+        # 当前节点的上游节点与下游节点
         self._upstreamComponents = set()
         self._downstreamComponents = set()
-        #cache机制，判断当前组件是否与之前的组件有所变动,默认改变了，需要删除之前的数据
+        # cache机制，判断当前组件是否与之前的组件有所变动,默认改变了，需要删除之前的数据
         self._changed = True
         self._namespace = None
+
+    @property
+    def topoLayerIndex(self):
+        return self._topoLayerIndex
+
+    @topoLayerIndex.setter
+    def topoLayerIndex(self, index: int):
+        if index < 0:
+            raise Exception("组件的topo Index必须不小于0")
+        self._topoLayerIndex = index
 
     @property
     def inputs(self):
@@ -193,7 +206,7 @@ class BaseComponent(Jsonable):
         _id = _id or ''
         if not isinstance(_id, str):
             raise TypeError('组件id必须是str类型')
-        if _id == '':  #如果用户没有指定，就用类的名称做id
+        if _id == '':  # 如果用户没有指定，就用类的名称做id
             #print('component id： ',self.__class__.__name__)
             self._id = str(self.__class__.__name__).lower()
         else:

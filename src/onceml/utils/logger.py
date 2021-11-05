@@ -12,7 +12,3 @@ if not logger.hasHandlers():
     formatter = ColoredFormatter(fmt=LOGFORMAT, datefmt='%Y-%m-%d %H:%M:%S')
     __handler.setFormatter(formatter)
     logger.addHandler(__handler)
-    
-    
-
-

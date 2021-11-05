@@ -37,6 +37,7 @@ class Pipeline():
 
     而且一个pipeline要做到模型分离，对于同一个场景，使用的数据相同，而模型不同，所以需要做到模型的训练分离
     '''
+
     def __init__(self, task_name: str, model_name: str,
                  components: Optional[Dict[str, BaseComponent]]):
         """
@@ -129,7 +130,7 @@ class Pipeline():
         chars = set('-_/')
         task_name, model_name = tuple_name[0], tuple_name[1]
         if any((c in chars) for c in task_name) or any(
-            (c in chars) for c in model_name):
+                (c in chars) for c in model_name):
             raise RuntimeError(
                 "pipeline的task name:%s 或者 model name:%s不能包含 '{}'符号 " %
                 (task_name, model_name, chars))
@@ -187,7 +188,8 @@ class Pipeline():
             logger.info('第 %d 层' % index)
             for component in layer:
                 logger.info('component id %s' % component.id)
-
+                #设置下topo index
+                component.topoLayerIndex = index
                 # 同时利用cache机制，判断是否可以利用之前的数据
                 pipeline_utils.compare_component(self._task_name,
                                                  self._model_name, component)
@@ -252,7 +254,7 @@ class Pipeline():
                 component.alias_component_id)
             component.alias_component_id = origin_component
             component.alias_model_name = origin_model
-            #component.deploytype='Cycle'
+            # component.deploytype='Cycle'
         else:
             # 说明是普通的组件，直接通过executor class的信息判断
             if (bool(component._executor_cls.Do == BaseExecutor.Do) == bool(
@@ -268,7 +270,7 @@ class Pipeline():
         '''
         for c in self.components:
             if type(c) == GlobalComponent:
-                #如果是共享组件，他的目录就应该是alias组件的目录
+                # 如果是共享组件，他的目录就应该是alias组件的目录
                 c.artifact.setUrl(
                     os.path.join(self._task_name, c.alias_model_name,
                                  c.alias_component_id))

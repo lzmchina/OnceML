@@ -36,16 +36,21 @@ class ModelGenerator(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def filter(self) -> Tuple:
+    def filter(self,known_results:List[Tuple[int,int,float]],time_scope:Tuple[int,int]) -> Tuple:
         """
         description
         ---------
         用于对特征工程组件产生的数据进行筛选，返回一个二元组（start timestamp,end timestamp）timestamp是特征工程里用户标记的，精确到秒即可
-        如果没有限制，就直接返回None，这个区间为闭区间
+        如果没有限制，就直接返回None，表示没有限制，这个区间为闭区间
+
+        用户可以在这个接口里使用一些回归模型预测性地给出二元组
         
         Args
         -------
-        
+        known_results：三元组(start timestamp,end timestamp,metrics)的list。目前已经尝试的时间戳组合的指标结果，供用户自己定义
+
+        time_scope:目前数据集的时间范围，二元组：(start timestamp,end timestamp)
+
         Returns
         -------
         (start timestamp,end timestamp):起始时间与结束时间
@@ -57,7 +62,7 @@ class ModelGenerator(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def train(self, file_list: List, ensemble_outout: Dict[str, list]) -> bool:
+    def train(self, file_list: List, ensemble_outout: Dict[str, list]) -> float:
         """
         description
         ---------
@@ -69,7 +74,7 @@ class ModelGenerator(abc.ABC):
         
         Returns
         -------
-        need_retrain:是否需要重新训练，可能训练后，自己验证会发现效果不好
+        metrics:本次训练的指标，用来衡量这个模型的好坏，如果是None，则意味着这个模型已经符合预期了，可以终止训练了（即使还没到最大尝试次数）
         
         Raises
         -------

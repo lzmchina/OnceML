@@ -12,6 +12,7 @@ import pickle
 import onceml.types.exception as exception
 import onceml.types.channel as channel
 from onceml.types.artifact import Artifact
+from onceml.utils.time import get_timestamp
 
 
 class _executor(BaseExecutor):
@@ -35,26 +36,28 @@ class _executor(BaseExecutor):
             id = int(os.path.splitext(file)[0])
             if id <= list(
                     input_channels.values())[0]["checkpoint"] and id > file_id:
-                #只有小于等于datasource组件传来的checkpoint、且大于组件状态file_id的文件才会来预处理
+                # 只有小于等于datasource组件传来的checkpoint、且大于组件状态file_id的文件才会来预处理
                 todo_files.append(file)
-        #按照文件的file id排序
+        # 按照文件的file id排序
         todo_files.sort(key=lambda x: int(os.path.splitext(x)[0]))
         print(todo_files)
         if len(todo_files) > 0:
             logger.info("当前有多个文件需要处理")
             gen_id = state['gen_id']
+            max_timestamp = 0
+            min_timestamp = get_timestamp()
             for file in todo_files:
                 logger.info("开始处理{}".format(file))
                 object_iter: GeneratorType = self.feature_func(
                     pickle.load(
                         open(os.path.join(data_preprocess_dir, file), 'rb')))
 
-                #一个文件返回的迭代器，可能会生成多个python object
-                #saved_object_space = 10 * 1024 * 1024  #一个文件最小以10MB大小保存
+                # 一个文件返回的迭代器，可能会生成多个python object
+                # saved_object_space = 10 * 1024 * 1024  #一个文件最小以10MB大小保存
                 #objects_list = []
                 #current_bytes = 0
-                file_id +=1
-                
+                file_id += 1
+
                 for timestamp, x_data, y_label in object_iter:
                     #file_bytes = sys.getsizeof(parse_object)
 
@@ -67,6 +70,10 @@ class _executor(BaseExecutor):
                     if timestamp is None:
                         timestamp = ''
                     elif type(timestamp) == int:  # timestamp单位建议为秒即可
+                        if(timestamp > max_timestamp):
+                            max_timestamp = timestamp
+                        if(timestamp < min_timestamp):
+                            min_timestamp = timestamp
                         timestamp = str(timestamp)
                     else:
                         exception.TypeNotAllowedError("timestamp应该是None或者int")
@@ -81,13 +88,15 @@ class _executor(BaseExecutor):
                     # objects_list = []
             state.update({
                 "file_id": file_id,
-                "gen_id": gen_id
+                "gen_id": gen_id,
+                "max_timestamp": max_timestamp,
+                "min_timestamp": min_timestamp
             })
 
         else:
             logger.warning("当前没有文件需要处理，跳过")
-            return {'checkpoint': state["gen_id"]}
-        return {'checkpoint': state["gen_id"]}
+            return {'checkpoint': state["gen_id"],"max_timestamp":state['max_timestamp'],"min_timestamp":state["min_timestamp"]}
+        return {'checkpoint': state["gen_id"],"max_timestamp":state['max_timestamp'],"min_timestamp":state["min_timestamp"]}
 
     def pre_execute(self, state: State, params: dict, data_dir: str):
         print('this is pre_execute')
@@ -109,21 +118,25 @@ class CycleDataFeaturing(BaseComponent):
         feature_func：特征工程的处理过程，会传给它预处理后文件的路径，返回可带有时间戳的sample数组或者迭代器
         它应该返回一个list或者迭代器，list的最高维应该是样本数目，每一个元素应该是三元组（timestamp,x_data,y_label）
         把x与y分开是为了模型集成
-        
+
 
 
         Returns
         -------
-        
+
         Raises
         -------
-        
+
         """
         if not isinstance(data_preprocess, BaseComponent):
             exception.TypeNotAllowedError("data_preprocess应该是BaseComponent的子类")
         super().__init__(executor=_executor,
                          inputs=[data_preprocess],
                          checkpoint=channel.OutputChannel(int),
+                         max_timestamp=channel.OutputChannel(int),
+                         min_timestamp=channel.OutputChannel(int),
                          feature_func=feature_func,
                          **args)
-        self.state = {"file_id": -1, "gen_id": -1}
+        current = get_timestamp()
+        self.state = {"file_id": -1, "gen_id": -1,
+                      "min_timestamp": current, "max_timestamp": current}
