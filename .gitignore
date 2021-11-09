@@ -54,4 +54,5 @@ MANIFEST
 .conda*/
 
 .db
+*.tar.gz
 

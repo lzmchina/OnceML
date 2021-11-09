@@ -27,3 +27,7 @@ docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.8
 docker build . -f Dockerfile/test.Dockerfile   -t liziming/onceml:0.0.1
 ### NFS server
 https://hub.docker.com/r/itsthenetwork/nfs-server-alpine
+
+### 数据文件读写镜像
+docker build ./benchmarks/IO/NFS/ -f Dockerfile/benchmark.Dockerfile  -t registry.cn-hangzhou.aliyuncs.com/liziming/oncemlio --build-arg HTTPS_PROXY=http://114.212.80.19:21087 
+docker build ./benchmarks/IO/NFS/ -f Dockerfile/benchmark_test.Dockerfile  --build-arg http_proxy=http://114.212.80.19:21087 --build-arg https_proxy=http://114.212.80.19:21087

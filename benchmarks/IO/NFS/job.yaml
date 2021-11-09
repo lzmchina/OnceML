@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name:  singlenodenfs
+  namespace: default
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      nodeName: n168.njuics.cn
+      restartPolicy: Never
+      containers: 
+        - name: singlenode
+          image: registry.cn-hangzhou.aliyuncs.com/liziming/oncemlio
+          workingDir: /kaggle/input/bengaliai-cv19/
+          command:
+            - "python" 
+            - "singleNode.py"
+          volumeMounts:
+            - name: nfscodes
+              mountPath: /kaggle/input/bengaliai-cv19/
+      volumes:
+        - name: nfscodes
+          persistentVolumeClaim:
+            claimName: nfstest
+      
+      
