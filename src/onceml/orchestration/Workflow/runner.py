@@ -7,7 +7,7 @@ import os
 import onceml.global_config as global_config
 from onceml.orchestration.Workflow.component import OnceMLComponent
 from onceml.orchestration.Workflow.types import Workflow
-from onceml.components.base import BaseComponent
+from onceml.components.base import BaseComponent, global_component
 import yaml
 import kubernetes.utils as k8s_utils
 
@@ -34,7 +34,7 @@ class OnceMLRunner(BaseRunner):
         pvc:要挂载的pvc名称
 
         docker_image:kfp里面的pod使用的镜像
-        
+
         namespace:将pod部署在某个namespace里
 
         Returns
@@ -95,18 +95,21 @@ class OnceMLRunner(BaseRunner):
         for layer in pipeline.layerComponents:
             dag_layer = []
             for component in layer:
-                dag_layer.append({
-                    "name": component.id,
-                    "deployType": component.deploytype
-                })
+                #cycle类型的GlobalComponent并不需要做出什么实际的动作
+                if type(component)==global_component.GlobalComponent and component.deploytype=="Cycle":
+                   continue
+                else:
+                    dag_layer.append({
+                        "name": component.id,
+                        "deployType": component.deploytype
+                    })
             workflow.add_dag_layer(dag_layer)
 
-        print(
-            yaml.dump(
-                workflow.to_dict(),
-                open(os.path.join(self._output_dir, 'yamls', file_name), "w")))
+        yaml.dump(
+            workflow.to_dict(),
+            open(os.path.join(self._output_dir, 'yamls', file_name), "w"))
         # 对数据库中的信息进行更新
-        #self.db_store(pipeline)
+        # self.db_store(pipeline)
 
     def db_store(self, pipeline: Pipeline):
         '''将phase更新
@@ -118,7 +121,7 @@ class OnceMLRunner(BaseRunner):
 
 
 def dump_yaml(data):
-    #See https://stackoverflow.com/questions/5121931/in-python-how-can-you-load-yaml-mappings-as-ordereddicts/21912744#21912744
+    # See https://stackoverflow.com/questions/5121931/in-python-how-can-you-load-yaml-mappings-as-ordereddicts/21912744#21912744
 
     def ordered_dump(data, stream=None, Dumper=yaml.Dumper, **kwds):
         class OrderedDumper(Dumper):
@@ -131,10 +134,10 @@ def dump_yaml(data):
         OrderedDumper.add_representer(OrderedDict, _dict_representer)
         OrderedDumper.add_representer(dict, _dict_representer)
 
-        #Hack to force the code (multi-line string) to be output using the '|' style.
+        # Hack to force the code (multi-line string) to be output using the '|' style.
         def represent_str_or_text(self, data):
             style = None
-            if data.find('\n') >= 0:  #Multiple lines
+            if data.find('\n') >= 0:  # Multiple lines
                 #print('Switching style for multiline text:' + data)
                 style = '|'
             if data.lower() in [

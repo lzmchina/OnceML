@@ -108,8 +108,8 @@ def db_update_pipeline_component(task_name, model_name,
               component.deploytype)  # 标记组件的deploytype
     db.update('.'.join([task_name, model_name, component.id, 'alias_model']),
               getattr(component, 'alias_model_name', None))  # 标记组件的依赖信息
-    print(getattr(component, 'alias_model_name', None),
-          getattr(component, 'alias_component_id', None))
+    # print(getattr(component, 'alias_model_name', None),
+    #       getattr(component, 'alias_component_id', None))
     db.update('.'.join(
         [task_name, model_name, component.id, 'alias_component']),
               getattr(component, 'alias_component_id', None))  # 标记组件的依赖信息

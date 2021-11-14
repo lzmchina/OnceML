@@ -67,6 +67,21 @@ class BaseExecutor:
 
     def pre_execute(self, state: State, params: dict, data_dir: str):
         """供Cycle类型组件使用，因为Cycle组件会循环执行Cycle函数，有一些全局变量只需要初始化一次即可
+        Args
+        -------
+        state:组件的当前状态
+        
+        params (dict):用户运行前确定的参数
+
+        data_dir:提供给用户保存数据用额目录
+
+
+        Returns
+        -------
+        Channels：本组件的Channels
+
+        Raises
+        -------
         """
         pass
 

@@ -14,6 +14,7 @@ class OnceMLComponent:
 
     将pipeline的组件转化至OnceMLComponent，包含执行的命令、使用的镜像、挂载的pv等信息
     '''
+
     def __init__(self,
                  task_name: str,
                  model_name: str,
@@ -29,7 +30,7 @@ class OnceMLComponent:
 
         Args
         -------
-      
+
 
         component：本pipeline的component
 
@@ -61,13 +62,13 @@ class OnceMLComponent:
             V1VolumeMount(name=pvc_name, mount_path=podconfigs.WORKINGDIR)
         ]
         if component.deploytype == 'Cycle':
-            #如果是Cycle，且不是global组件，则需要增加port配置
-            #因为global组件相当于他别名的组件的替身，可以看作是他别名的组件要向后继组件发送消息
-            if type(component) != global_component.GlobalComponent:
-                self.containerop.container.ports = [
-                    V1ContainerPort(
-                        container_port=podconfigs.SERVERPORT)  # 开放端口
-                ]
+            # 如果是Cycle，且不是global组件，则需要增加port配置
+            # 因为global组件相当于他别名的组件的替身，可以看作是他别名的组件要向后继组件发送消息
+            # if type(component) != global_component.GlobalComponent:
+            self.containerop.container.ports = [
+                V1ContainerPort(
+                    container_port=podconfigs.SERVERPORT)  # 开放端口
+            ]
             # 设置pod的label，保证Cycle类型的组件能够打上上游cycle组件的标签，这样上游组件就可以通过label来获取要发送
             # 的组件的list
             for c in component.upstreamComponents:
@@ -100,7 +101,7 @@ class OnceMLComponent:
             value=k8sConfig.COMPONENT_POD_LABEL_VALUE.format(
                 project_name or global_config.PROJECTDIRNAME, task_name,
                 model_name, component.id))
-        #加入环境变量，方便pod里的程序能够使用api
+        # 加入环境变量，方便pod里的程序能够使用api
         self.containerop.container.env = [
             V1EnvVar(name='{}ENV'.format(global_config.project_name),
                      value='INPOD')

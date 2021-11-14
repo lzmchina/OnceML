@@ -49,7 +49,9 @@ class BaseComponent(Jsonable):
 
         shared(bool):是否会共享组件的数据 (todo)
 
-        args :自行定义各种参数，component会检查每个参数的type，如果是OutputChannel，就是组件Channel的一个属性，其他则认为是params，返回给组件运行时使用
+        args :自行定义各种参数，component会检查每个参数的type，如果是OutputChannel，就是组件Channel的一个属性，只会在组件的cycle或者do函数执行完成后
+        对其返回的字典中的key做校验，如果key没有用OutputChannel声明，则会被丢弃
+        ;其他则认为是params，返回给组件运行时使用
 
 
 
@@ -64,7 +66,8 @@ class BaseComponent(Jsonable):
 
         if not issubclass(executor, BaseExecutor):
             raise TypeError('传入的executor不是BaseExecutor class')
-
+        if inputs is not None and type(inputs)!=list:
+            raise TypeError("组件的inputs必须是list")
         self._dependentComponent: List[BaseComponent] = inputs or []
         for c in self._dependentComponent:
             if not isinstance(c, BaseComponent):

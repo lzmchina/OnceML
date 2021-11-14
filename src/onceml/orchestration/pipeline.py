@@ -254,7 +254,7 @@ class Pipeline():
                 component.alias_component_id)
             component.alias_component_id = origin_component
             component.alias_model_name = origin_model
-            # component.deploytype='Cycle'
+            #component.deploytype='Do'
         else:
             # 说明是普通的组件，直接通过executor class的信息判断
             if (bool(component._executor_cls.Do == BaseExecutor.Do) == bool(

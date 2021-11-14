@@ -38,7 +38,10 @@ def judge_update(before_component: base_component.BaseComponent,
     # case 3:组件依赖的组件列表是否有变化
     topoChanged = False
     lastList = list(before_component.upstreamComponents).sort()
-    currentList = [x.id() for x in current_component.upstreamComponents].sort()
+    # print(list(current_component.upstreamComponents))
+    # for x in list(current_component.upstreamComponents):
+    #     print(x.id)
+    currentList = list([x.id for x in list(current_component.upstreamComponents)]).sort()
     if lastList != currentList or before_component.topoLayerIndex != current_component.topoLayerIndex:
         topoChanged = True
     # case 2: 组件的拓扑结构发生变化

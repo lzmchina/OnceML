@@ -7,6 +7,7 @@ from onceml.templates.ModelGenerator import ModelGenerator
 import onceml.utils.logger as oncemllogger
 from onceml.utils.logger import logger
 import logging
+import queue
 logger.info("dsdd")
 def shutdownFunction(signalnum, frame):
     print('You pressed Ctrl+C!')
@@ -41,7 +42,9 @@ class myHandler(BaseHTTPRequestHandler):
         print("xdxdx")
 
 
-PORT_NUM = 8080
+PORT_NUM = 10087
 serverAddress = ("0.0.0.0", PORT_NUM)
 server = ThreadingHTTPServer(serverAddress, myHandler)
-server.serve_forever()
+#server.server_activate()
+q=queue.Queue()
+q.get()

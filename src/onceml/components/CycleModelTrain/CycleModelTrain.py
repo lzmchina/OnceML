@@ -50,10 +50,13 @@ class _executor(BaseExecutor):
         model_generator = None
         latest_checkpoint = state["model_checkpoint"]
         current_file_id = state['current_file_id']
-        recieved_file_id = list(input_channels.values())[0]["checkpoint"]
+        featuring_channels = list(input_channels.values())[0]
+        recieved_file_id = featuring_channels["checkpoint"]
+        max_timestamp = featuring_channels["max_timestamp"]
+        min_timestamp = featuring_channels["min_timestamp"]
         if recieved_file_id <= current_file_id:
             logger.info("特征工程的最新file id 没超过current_file_id")
-            return None
+            return {'checkpoint': state["model_checkpoint"]}
         if latest_checkpoint == -1:  # 第一次训练，无需验证，也没有模型可以恢复
             logger.info("第一次训练，无需验证，也没有模型可以恢复")
             model_generator: ModelGenerator = self.model_cls(None)
@@ -100,7 +103,8 @@ class _executor(BaseExecutor):
             best_model = None
             beat_metrics = None
             for i in range(params['max_trial']):
-                start_timestamp, end_timestamp = model_generator.filter(known_results)
+                start_timestamp, end_timestamp = model_generator.filter(
+                    known_results=known_results, time_scope=(min_timestamp, max_timestamp))
                 model_generator_copy = copy.deepcopy(model_generator)
                 matrics = self.standalone_train(
                     model_generator=model_generator_copy,
@@ -231,8 +235,8 @@ class _executor(BaseExecutor):
 
             logger.info('开始向要使用的模型发送消息：{}'.format(data))
             # 当集成的所有模型都已经完成，就会往这个队列塞一个元素，使得阻塞的线程能够继续
-            logger.info("现在队列里元素个数".format(
-                self.ensemble_feedback_queue.all_tasks_done()))
+            # logger.info("现在队列里元素个数".format(
+            #     self.ensemble_feedback_queue.all_tasks_done()))
             self.ensemble_feedback_queue.join()
             try:
                 asyncMsg([

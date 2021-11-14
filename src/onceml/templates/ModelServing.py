@@ -8,7 +8,7 @@
 @version	:0.0.1
 '''
 import abc
-from typing import List
+from typing import Any, Dict, List
 class ModelServing(abc.ABC):
     def __init__(self,model_checkpoints:str):
         """
@@ -29,7 +29,7 @@ class ModelServing(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def serving(self,json_data:str)->str:
+    def serving(self,json_data:str,ensemble_outout: Dict[str, str])->Any:
         """
         description
         ---------
@@ -37,6 +37,9 @@ class ModelServing(abc.ABC):
         
         Args
         -------
+        json_data:前端发来的请求服务，为json字符串，需要用户自行解析
+
+        ensemble_outout：如果该模型有依赖其他模型，就会自动获取它们的结果并赋值在ensemble_outout字典
         
         Returns
         -------

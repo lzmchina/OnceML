@@ -508,6 +508,8 @@ class BaseDriver(abc.ABC):
                 while True:
                     channel_result = self.execute(Do_Channels,
                                                   Artifacts)  # 获得运行的结果
+                    # 将state保存
+                    self._component.state.dump()
                     if channel_result is None:
                         # 如果消息为None，则直接跳过
                         logger.logger.info('暂时没有需要发送至下游组件的消息，跳过执行')
@@ -516,11 +518,10 @@ class BaseDriver(abc.ABC):
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
-
+                   
                     # 将结果发送给后续cycle节点(如果有的话)
                     self.send_channels(validated_channels)
-                    # 将state保存
-                    self._component.state.dump()
+                    
 
             else:
                 logger.logger.info('该组件受到前面组件信号的控制')
@@ -544,6 +545,8 @@ class BaseDriver(abc.ABC):
                             **Do_Channels,
                             **Cycle_Channels
                         }, Artifacts)  # 获得运行的结果
+                    # 将state保存
+                    self._component.state.dump()
                     if channel_result is None:
                         # 如果消息为None，则直接跳过
                         logger.logger.info('暂时没有需要发送至下游组件的消息，跳过执行')
@@ -553,11 +556,8 @@ class BaseDriver(abc.ABC):
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
-
                     # 将结果发送给后续cycle节点(如果有的话)
                     self.send_channels(validated_channels)
-                    # 将state保存
-                    self._component.state.dump()
                     time.sleep(5)
 
     def clear_component_data(self, component_dir: str):
