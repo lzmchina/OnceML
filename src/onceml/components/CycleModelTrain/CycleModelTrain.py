@@ -26,6 +26,7 @@ import onceml.global_config as global_config
 import json
 from threading import Thread, Lock
 import copy
+from .ModelDag import getModelNodeList, updateUpStreamNode
 
 
 class _executor(BaseExecutor):
@@ -416,3 +417,16 @@ class CycleModelTrain(BaseComponent):
             # 记录下依赖的模型的版本
             # 只有在收到feedback后，才会更新这个时间戳
             self.state['ensemble_model_checkpoint'][model] = -1
+
+    def static_check(self, task_name: str, model_name: str):
+        """
+        将依赖的模型加入到一个图之中，每个task会有一个模型依赖图DAG
+        """
+        
+        print(getModelNodeList(task_name=task_name))
+        updateUpStreamNode(
+            task_name=task_name, 
+            model_name=model_name, 
+            up_stream_models=self._params["emsemble_models"]
+        )
+        print(getModelNodeList(task_name=task_name))

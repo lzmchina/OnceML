@@ -238,3 +238,49 @@ class BaseComponent(Jsonable):
     @state.setter
     def state(self, json2state: Dict[str, Any]) -> None:
         self._state = State(data=json2state)
+
+    def static_check(self,task_name:str,model_name:str):
+        """
+        description
+        ---------
+        组件在被解析成workflow资源的之前的静态过程。
+
+        比如model generator组件与model serving组件，就需要进行模型依赖DAG图的构建，在这个构建的过程里
+        需要确保DAG不能出现环
+
+        Args
+        -------
+        task_name:str pipeline的task名称
+
+        model_name:str pipeline的model名称
+
+        Returns
+        -------
+        
+        Raises
+        -------
+        
+        """
+        raise Exception("must be extended")
+    """
+    todo:组件的缓存复用检测目前是放在静态编译阶段，然后将是否可复用的flag传递到组件里
+    组件序列化后，编排器再执行的时候会根据这个flag判断是否要清空之前的数据。这样就会有一个问题，
+    如果是cycle类型的组件，进程挂了后，再重启，会导致数据被删除，以后考虑将这个过程作为动态过程
+    """
+    def dynamic_check(self):
+        """
+        description
+        ---------
+        这个是当组件在实际被driver执行时的动态check过程
+        Args
+        -------
+        
+        Returns
+        -------
+        
+        Raises
+        -------
+        
+        """
+        raise Exception("must be extended")
+        

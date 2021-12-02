@@ -13,7 +13,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 from typing import List, Optional, Text, Dict
-from onceml.components.base import BaseComponent, BaseExecutor
+from onceml.components.base import BaseComponent, BaseExecutor, base_component
 from onceml.utils.topsort import topsorted_layers
 import os
 import onceml.types.exception as exception
@@ -24,10 +24,6 @@ from onceml.utils.logger import logger
 import onceml.global_config as global_config
 
 
-# class PipelineParam(Jsonable):
-#     def
-#     def to_json_dict(self):
-#         return super().to_json_dict()
 class Pipeline():
     '''将一个流水线抽象为pipeline
 
@@ -82,6 +78,7 @@ class Pipeline():
         self.id = (task_name, model_name)
         self.components = components.values() or []
         self.allocate_component_artifact_url()
+        self.static_check()
         # 依赖的模型
         #self._depend_models = []
         #self.depend_models = depend_models
@@ -102,7 +99,28 @@ class Pipeline():
     #             #说明依赖的model不存在
     #             raise exception.PipelineNotFoundError('{}并不存在'.format('_'.join([self._task_name,model])))
     #         self._depend_models.append(self._task_name+'_'+model)
+    def static_check(self):
+        """call component static_check()
+        description
+        ---------
+        按照components顺序执行组件的静态检测函数static_check()
 
+        
+        Args有些组件需要在本地静态执行时，进行一些静态的操作。比如model generator组件，需要构建task的全局模型
+        依赖图model DAG，同时需要检测当增加一个模型依赖节点后，这个DAG是否会出现错误
+        -------
+        
+        Returns
+        -------
+        
+        Raises
+        -------
+        
+        """
+        for c in self.components:
+            #只有重载了函数才会执行
+            if c.__class__.static_check!=BaseComponent.static_check:
+                c.static_check(self._task_name,self._model_name)
     @property
     def rootdir(self) -> str:
         '''pipine结果存放的目录*/{task name}/{model name}
