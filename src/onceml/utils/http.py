@@ -18,12 +18,24 @@ async def http_request(url, data, headers, timeout):
                                 timeout=aiohttp.ClientTimeout(timeout)) as res:
             # http://httpbin.org/get?key1=value1&key2=value2
             #print(res.status) res.text()
-            await res.text()
-            return res.status
+            json_body=await res.json()
+            return res.status,json_body
+async def http_request_get(url, headers, timeout):
+    async with aiohttp.ClientSession(
+            trust_env=True,
+            connector=aiohttp.TCPConnector(verify_ssl=False)) as session:
+        async with session.get(url,
+                                headers=headers,
+                                timeout=aiohttp.ClientTimeout(timeout)) as res:
+            # http://httpbin.org/get?key1=value1&key2=value2
+            #print(res.status) res.text()
+            json_body=await res.json()
+            return res.status,json_body
 
 
-def asyncMsg(hosts: Tuple, data, timeout: int = 3):
+def asyncMsg(hosts: Tuple, data, timeout: int = 3,auto_check_ok=True):
     """向hosts列表发送data，如果有失败，则抛出异常
+    
     """
 
     try:
@@ -52,11 +64,48 @@ def asyncMsg(hosts: Tuple, data, timeout: int = 3):
     #try:
     results = loop.run_until_complete(asyncio.gather(*task_list))
     logger.logger.info(results)
-    for i, host in enumerate(hosts):
-        if results[i] != 200:
-            #need_again_send = True
-            raise exception.SendChannelError
+    if auto_check_ok:
+        for i, host in enumerate(hosts):
+            if results[i][0] != 200:
+                #need_again_send = True
+                raise exception.SendChannelError
+    else:
+        return results
+def asyncMsgGet(hosts: Tuple,timeout: int = 3,auto_check_ok=True):
+    """向hosts列表发送data，如果有失败，则抛出异常
+    
+    """
 
+    try:
+        #如果是主线程，这里会直接设置新的event_loop
+        asyncio.get_event_loop()
+    except:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    loop = asyncio.get_event_loop()
+    logger.logger.info('Before gc:{}'.format(
+        len(asyncio.Task.all_tasks(loop=loop))))
+
+    gc.collect()
+
+    logger.logger.info('After gc:{}'.format(
+        len(asyncio.Task.all_tasks(loop=loop))))
+    logger.logger.info(hosts)
+    task_list = []
+    for host in hosts:
+        task_list.append(
+            asyncio.ensure_future(
+                http_request_get(host, {}, 3)))
+
+    results = loop.run_until_complete(asyncio.gather(*task_list))
+    logger.logger.info(results)
+    if auto_check_ok:
+        for i, host in enumerate(hosts):
+            if results[i][0] != 200:
+                #need_again_send = True
+                raise exception.SendChannelError
+    else:
+        return results
     # except Exception as e:
     #     logger.logger.error(e)
     #     logger.logger.error("发送失败")

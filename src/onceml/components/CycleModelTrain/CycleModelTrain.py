@@ -1,4 +1,6 @@
 from typing import Dict, List, Tuple
+
+from six import MAXSIZE
 from onceml.components.base import BaseComponent, BaseExecutor
 from onceml.templates import ModelGenerator
 from onceml.types.state import State
@@ -14,19 +16,20 @@ import onceml.types.exception as exception
 import onceml.types.channel as channel
 from onceml.types.artifact import Artifact
 from onceml.utils.dir_utils import getLatestTimestampDir
-from .Util import getTimestampFilteredFile, getEvalSampleFile, getPodLabelValue, getPodIpByLabel, updateModelCheckpointToDb, checkModelList, diffFileList
+from .Util import _MIN_INT, getTimestampFilteredFile, getEvalSampleFile, getPodLabelValue, getPodIpByLabel, updateModelCheckpointToDb, checkModelList, diffFileList, getModelCheckpointFromDb, getModelDir
 from onceml.utils.time import get_timestamp
 from queue import Queue
 from http.server import BaseHTTPRequestHandler
 import onceml.configs.k8sConfig as k8sConfig
 import onceml.utils.pipeline_utils as pipeline_utils
 import onceml.utils.k8s_ops as k8s_ops
-from onceml.utils.http import asyncMsg, asyncMsgByHost
+from onceml.utils.http import asyncMsg, asyncMsgByHost, asyncMsgGet
 import onceml.global_config as global_config
 import json
 from threading import Thread, Lock
 import copy
-from .ModelDag import getModelNodeList, updateUpStreamNode
+from .ModelDag import getModelNodeList, updateUpStreamNode, getModelNode
+from deprecated.sphinx import deprecated
 
 
 class _executor(BaseExecutor):
@@ -34,13 +37,19 @@ class _executor(BaseExecutor):
         super().__init__()
         self.component_state = {}
         self.ensemble_feedback_queue = Queue()
+        """存放上游组件的版本信息"""
+        self.up_model_checkpoint = {}  # type:Dict[str,int]
         self.data_dir = ""
-        # 存放收到的计算请求，记录每个组件的timestamp
-        self.ensemble_requests = {}
-        # 存放发出的计算请求，记录每个组件的timestamp，只有收到的反馈里的timestamp等于记录的tiestamp，才可以
-        self.ensemble_feedback_flag = {}
         # 同步锁
         self.lock = Lock()
+
+        # 存放收到的计算请求，记录每个组件的timestamp
+        self.ensemble_requests = {}
+        # 存放发出的计算请求，记录每个组件的timestamp，只有收到的反馈里的timestamp等于记录的tiestamp，才认为是需要的
+        self.ensemble_feedback_flag = {}
+
+        # 收到的下游模型的更新请求，每次cycle逻辑，都会去将队列里面要通知的模型取出去通知
+        self.down_stream_model_update_queue = Queue()
 
     def Cycle(self,
               state: State,
@@ -48,6 +57,12 @@ class _executor(BaseExecutor):
               data_dir: str,
               input_channels: Dict[str, channel.Channels] = None,
               input_artifacts: Dict[str, Artifact] = None):
+        if len(self.emsemble_models) > 0:
+            # 有集成模型，需要先获得这些模型的模型信息
+            # 1. 先从数据库里更新state里面上游模型的信息
+            # 2. 若第一步只有部分模型有大于-1的checkpoint，就阻塞等待，消费ensemble_feedback_queue队列的数据，来更新state
+            logger.info("有集成依赖模型，需要先查询依赖模型的信息")
+            self.update_up_model_version()
         model_generator = None
         latest_checkpoint = state["model_checkpoint"]
         current_file_id = state['current_file_id']
@@ -55,80 +70,82 @@ class _executor(BaseExecutor):
         recieved_file_id = featuring_channels["checkpoint"]
         max_timestamp = featuring_channels["max_timestamp"]
         min_timestamp = featuring_channels["min_timestamp"]
+        samples_dir = list(input_artifacts.values())[0].url
         if recieved_file_id <= current_file_id:
             logger.info("特征工程的最新file id 没超过current_file_id")
+            self.broadcast_model_version()
             return {'checkpoint': state["model_checkpoint"]}
+        self.lock.acquire()
+        checkpoint_flag = [c == -1 for c in self.up_model_checkpoint.values()]
+        self.lock.release()
+        if any(checkpoint_flag):
+            logger.info("集成模型存在部分没有模型")
+            self.broadcast_model_version()
+            return {'checkpoint': state["model_checkpoint"]}
+
+        need_train = True
         if latest_checkpoint == -1:  # 第一次训练，无需验证，也没有模型可以恢复
             logger.info("第一次训练，无需验证，也没有模型可以恢复")
-            model_generator: ModelGenerator = self.model_cls(None)
-        else:
+        else:  # 需要验证一下旧模型的效果
             logger.info("从{}恢复模型".format(latest_checkpoint))
             model_generator: ModelGenerator = self.model_cls(
                 os.path.join(data_dir, 'checkpoints', str(latest_checkpoint)))
-        samples_dir = list(input_artifacts.values())[0].url
-
-        need_train = True
-        if latest_checkpoint != -1:  # 需要验证一下旧模型的效果
             logger.info("现在来验证上一个模型的效果")
-            evalfiles_with_prefix, evalfiles = getEvalSampleFile(
+            evalfiles_with_prefix, _ = getEvalSampleFile(
                 samples_dir, '\d+-\d+.pkl', current_file_id, recieved_file_id)
-            ensemble_model_files = {}
-            if len(self.emsemble_models) > 0:
-                # 有集成模型，需要先获得这些模型的输出结果文件
-                logger.info("有集成依赖模型，需要先传递消息")
-                pickle.dump(
-                    evalfiles,
-                    open(os.path.join(data_dir, "evalfiles.pkl"), 'wb'))
-                self.advice_ensemble_model(
-                    model_list=params['emsemble_models'],
-                    file_list=os.path.join(data_dir, "evalfiles.pkl"),
-                    resource_namespace=self.
-                    component_msg['resource_namespace'],
-                    save_dir=os.path.join(data_dir, 'ensemble_results'),
-                    samples_dir=samples_dir)
-                # 会block住，直到集成的模型全部完成
-
-                for _ in self.emsemble_models:
-                    model, checkpoint = self.ensemble_feedback_queue.get()
-                    ensemble_model_files[model] = [
-                        os.path.join(data_dir, 'ensemble_results', model,
-                                     checkpoint, file) for file in evalfiles
-                    ]
-                    self.ensemble_feedback_queue.task_done()
-            need_train = model_generator.eval(evalfiles_with_prefix,
-                                              ensemble_model_files)
-
+            # 存放依赖的模型的目录，供组件进行模型的加载
+            ensemble_model_dirs = {}
+            self.lock.acquire()
+            model_checkpoints = self.up_model_checkpoint.items()
+            self.lock.release()
+            for model, c in model_checkpoints:
+                ensemble_model_dirs[model] = getModelDir(
+                    self.component_msg["task_name"], model, c)
+            try:
+                need_train = model_generator.eval(evalfiles_with_prefix,
+                                                  ensemble_model_dirs)
+            except Exception as e:
+                logger.error(e)
+                self.broadcast_model_version()
+                return {'checkpoint': state["model_checkpoint"]}
         if need_train:
             logger.info("现在来训练模型")
             known_results = []
             best_model = None
-            beat_metrics = None
-            for i in range(params['max_trial']):
+            beat_metrics = _MIN_INT
+            for _ in range(params['max_trial']):
+                model_generator=None
+                if latest_checkpoint == -1:
+                    model_generator: ModelGenerator = self.model_cls(None)
+                else:
+                    model_generator: ModelGenerator = self.model_cls(
+                        os.path.join(data_dir, 'checkpoints', str(latest_checkpoint)))
                 start_timestamp, end_timestamp = model_generator.filter(
                     known_results=known_results, time_scope=(min_timestamp, max_timestamp))
-                model_generator_copy = copy.deepcopy(model_generator)
-                matrics = self.standalone_train(
-                    model_generator=model_generator_copy,
-                    samples_dir=samples_dir,
-                    recieved_file_id=recieved_file_id,
-                    data_dir=data_dir,
-                    params=params,
-                    start_timestamp=start_timestamp,
-                    end_timestamp=end_timestamp)
-                if matrics != None:
-                    known_results.append((start_timestamp, end_timestamp, matrics))
-                    if beat_metrics is None:
-                        beat_metrics = matrics
-                        best_model = model_generator_copy
-                    else:
+                try:
+                    matrics = self.standalone_train(
+                        model_generator=model_generator,
+                        samples_dir=samples_dir,
+                        recieved_file_id=recieved_file_id,
+                        data_dir=data_dir,
+                        params=params,
+                        start_timestamp=start_timestamp,
+                        end_timestamp=end_timestamp)
+                    if matrics != None:
+                        known_results.append((start_timestamp, end_timestamp, matrics))
                         if matrics > beat_metrics:
                             beat_metrics = matrics
-                            best_model = model_generator_copy
-                else:
-                    best_model = model_generator_copy
-                    break
+                            best_model = model_generator
+                    else:
+                        best_model = model_generator
+                        break
+                except Exception as e:
+                    logger.error(e)
+                    continue
             if best_model is None:
-                raise Exception("没有可用的模型产生")
+                logger.error("没有可用的模型产生")
+                self.broadcast_model_version()
+                return {'checkpoint': state["model_checkpoint"]}
             new_checkpoint = str(get_timestamp())
             new_checkpoint_dir = os.path.join(data_dir, 'checkpoints',
                                               new_checkpoint)
@@ -151,7 +168,7 @@ class _executor(BaseExecutor):
         self.ensemble_feedback_queue = Queue(maxsize=len(self.emsemble_models))
         os.makedirs(os.path.join(data_dir, 'checkpoints'), exist_ok=True)
         # 创建存放集成模型的输出结果
-        os.makedirs(os.path.join(data_dir, 'ensemble_results'), exist_ok=True)
+        #os.makedirs(os.path.join(data_dir, 'ensemble_results'), exist_ok=True)
         # 在数据库里注册组件的信息
         pipeline_utils.update_pipeline_model_component_id(
             project_name=self.component_msg['project'],
@@ -160,50 +177,147 @@ class _executor(BaseExecutor):
             model_component_id=self.component_msg['component_id'])
 
         self.component_state = state  # 访问组件状态需要
+        """
+        最开始的up model的 checkpoint都是-1
+        1. 在pre_execute阶段会向up model所在的组件发送查询，得到能够响应的模型的版本信息
+        2. 在Cycle阶段，如果up_model_checkpoint里面有==-1的模型，需要阻塞，直到全部为>-1的值
+        """
+        self.update_up_model_version()
+        """再将自身的模型信息传送给下游模型
+        主要从以下情况考虑：可能下游模型存储本模型的版本为100，然后本pipeline重新部署，且
+        changed标识位为true，那么就会清除模型，这时需要通知下游组件我的checkpoint已经变了
+        """
+        self.broadcast_model_version()
+
+    def broadcast_model_version(self):
+        """向下游组件广播自己的checkpoint
+        """
+        cur = getModelNode(
+            self.component_msg['task_name'], self.component_msg['model_name'])
+        if cur is None:
+            raise RuntimeError("模型{}在模型依赖图里没有对应的节点".format(
+                self.component_msg['model_name']))
+        down_models = [node.model_name for node in cur.down_models]
+        model_pod_label = getPodLabelValue(self.component_msg['task_name'],
+                                           down_models)
+        model_hosts: dict[str, str] = getPodIpByLabel(
+            model_pod_label, self.component_msg['resource_namespace'])
+        logger.info("要广播的model host：{}".format(model_hosts))
+        self.lock.acquire()
+        data = {
+            "model": self.component_msg['model_name'],
+            "checkpoint": self.component_state["model_checkpoint"]
+        }
+        self.lock.release()
+        responses = asyncMsg([
+            "http://{}:{}/feedbackv2".format(ip,
+                                             global_config.SERVERPORT)
+            for ip in list(model_hosts.values())
+        ], data, 3, False)
+        success_list = []
+        for status, jsondata in responses:
+            if status == 200:
+                success_list.append(jsondata["model"])
+        logger.info("成功通知:{}".format(",".join(success_list)))
+
+    def update_up_model_version(self):
+        """更新上游模型的当前版本
+        1. 通过get的http请求查询组件的接口，如果返回结果，说明该模型的pipeline正在运行，得到的checkpoint也是最新的
+        2. 第一步之后，可能部分模型获取不到结果，说明对应的pipeline还没开始运行，或者运行过但结束了，这时可以从数据库里进行更新
+        """
+        self.lock.acquire()
+        for up_model in self.emsemble_models:
+            self.up_model_checkpoint[up_model] = -1
+        self.lock.release()
+        model_pod_label = getPodLabelValue(self.component_msg['task_name'],
+                                           self.emsemble_models)
+        model_hosts: dict[str, str] = getPodIpByLabel(
+            model_pod_label, self.component_msg['resource_namespace'])
+        logger.info("要更新模型版本的model host：{}".format(model_hosts))
+
+        responses = asyncMsgGet([
+            "http://{}:{}/version".format(ip,
+                                          global_config.SERVERPORT)
+            for ip in list(model_hosts.values())
+        ], 3, False)
+        success_list = []
+        for status, jsondata in responses:
+            if status == 200:
+                self.lock.acquire()
+                self.up_model_checkpoint[jsondata["model"]] = jsondata["checkpoint"]
+                self.lock.release()
+                success_list.append(jsondata["model"])
+        for model in self.emsemble_models:
+            if model not in success_list:
+                checkpoint = getModelCheckpointFromDb(
+                    self.component_msg['task_name'],
+                    model)
+                self.lock.acquire()
+                self.up_model_checkpoint[model] = checkpoint
+                self.lock.release()
 
     def standalone_train(self, model_generator: ModelGenerator, samples_dir: str, recieved_file_id: str, data_dir: str, params: dict, start_timestamp: int, end_timestamp: int) -> float:
         """进行一次训练，产生一个模型
 
         当需要训练时，选取一个最佳的时间范围的数据很重要
         """
-        ensemble_model_files = {}
+        ensemble_model_dirs = {}
+        self.lock.acquire()
+        model_checkpoints = self.up_model_checkpoint.items()
+        self.lock.release()
+        for model, c in model_checkpoints:
+            ensemble_model_dirs[model] = getModelDir(
+                self.component_msg["task_name"], model, c)
 
-        filtered_list_with_prefix, filtered_list = getTimestampFilteredFile(
+        filtered_list_with_prefix, _ = getTimestampFilteredFile(
             samples_dir, '\d+-\d+.pkl', start_timestamp, end_timestamp,
             recieved_file_id)
 
-        if len(self.emsemble_models) > 0:
-            # 有集成模型，需要先获得这些模型的输出结果文件
-            logger.info("有集成模型，需要先获得这些模型的输出结果文件")
-            pickle.dump(
-                filtered_list,
-                open(os.path.join(data_dir, "trainfiles.pkl"), 'wb'))
-            self.advice_ensemble_model(
-                model_list=params['emsemble_models'],
-                file_list=os.path.join(data_dir, "trainfiles.pkl"),
-                resource_namespace=self.
-                component_msg['resource_namespace'],
-                save_dir=os.path.join(data_dir, 'ensemble_results'),
-                samples_dir=samples_dir)
-            # 会block住，直到集成的模型全部完成
-            for _ in self.emsemble_models:
-                model, checkpoint = self.ensemble_feedback_queue.get()
-                ensemble_model_files[model] = [
-                    os.path.join(data_dir, 'ensemble_results', model,
-                                 checkpoint, file)
-                    for file in filtered_list
-                ]
-                self.component_state["ensemble_model_checkpoint"][model] = checkpoint
-                self.ensemble_feedback_queue.task_done()
         train_metrics = None
         try:
             train_metrics = model_generator.train(filtered_list_with_prefix,
-                                                  ensemble_model_files)
+                                                  ensemble_model_dirs)
         except Exception as e:
-            logger.info("训练出错训练无效")
+            logger.error("训练出错训练无效")
             logger.error(e)
+            raise e
         return train_metrics
 
+    def GET_version(self, req_handler: BaseHTTPRequestHandler):
+        """返回当前的模型的checkpoint
+
+        """
+        req_handler.send_response(200)
+        req_handler.send_header('Content-type', 'application/json')
+        req_handler.end_headers()
+        req_handler.wfile.write(json.dumps({
+            "model": self.component_msg["model_name"],
+            "checkpoint": self.component_state["model_checkpoint"]
+        }).encode("utf-8"))
+
+    def POST_feedbackv2(self, req_handler: BaseHTTPRequestHandler):
+        '''负责接受上游模型的反馈
+        上游模型在产生一个模型后，会从模型依赖dag图里面查询自己的下游节点，再尝试将自己的版本信息发送至下游组件
+        '''
+        content_length = int(req_handler.headers['Content-Length'])
+        post_data = req_handler.rfile.read(content_length).decode(
+            'utf-8')  # <--- Gets the data itself
+        msg = dict(json.loads(post_data))
+        recieved_model = msg['model']
+        recieved_checkpoint = msg['checkpoint']
+        logger.info("收到模型：{}的版本广播，其使用的checkpoint为：{}".format(
+            recieved_model, recieved_checkpoint))
+        req_handler.send_response(200)
+        req_handler.send_header('Content-type', 'application/json')
+        req_handler.end_headers()
+        req_handler.wfile.write(json.dumps({
+            "model": self.component_msg["model_name"]
+        }).encode("utf-8"))
+        self.lock.acquire()
+        self.up_model_checkpoint["recieved_model"] = recieved_checkpoint
+        self.lock.release()
+
+    @deprecated(reason="not use", version="0.0.1")
     def advice_ensemble_model(self, model_list: list, file_list: str,
                               resource_namespace: str, save_dir: str,
                               samples_dir: str):
@@ -249,6 +363,7 @@ class _executor(BaseExecutor):
             except:
                 logger.error("发送失败")
 
+    @deprecated(reason="not use", version="0.0.1")
     def calculate(self, msg: dict):
         '''实际的集成处理
         因为模型的训练是一个长时过程，在收到计算请求后，需要立即响应http请求，再开一个线程进行计算
@@ -311,6 +426,7 @@ class _executor(BaseExecutor):
             except:
                 logger.error("发送失败")
 
+    @deprecated(reason="not use", version="0.0.1")
     def POST_calculate(self, req_handler: BaseHTTPRequestHandler):
         '''负责接受其他模型的请求，对file list进行计算
         '''
@@ -337,6 +453,7 @@ class _executor(BaseExecutor):
         req_handler.send_header('Content-type', 'application/json')
         req_handler.end_headers()
 
+    @deprecated(reason="not use", version="0.0.1")
     def POST_feedback(self, req_handler: BaseHTTPRequestHandler):
         '''负责接受已经完成计算任务的模型的反馈
         '''
@@ -361,6 +478,96 @@ class _executor(BaseExecutor):
         req_handler.send_response(200)
         req_handler.send_header('Content-type', 'application/json')
         req_handler.end_headers()
+
+    @deprecated(reason="not use", version="0.0.1")
+    def queryEnsembleModelInfo(self, model_list: list, resource_namespace: str):
+        """查询上游模型的信息
+
+        上游模型有以下状态：
+
+        1. kv数据库里没有模型版本：意味着它的pipeline还没有运行或者正在运行，但没有产生一个版本
+        2. kv数据库里有模型版本：可以拿过来直接使用
+
+        针对以上的两种情况
+
+        第一种需要进行注册，告诉上游模型我需要你在产生一个模型后通知我\n
+        第二种就可以直接从数据库里获取
+        """
+        known_models = {}
+        unknown_models = []
+        for model in model_list:
+            checkpoint = getModelCheckpointFromDb(
+                self.component_msg['task_name'],
+                model)
+            if checkpoint != -1:
+                known_models[model] = getModelDir(
+                    self.component_msg['task_name'], model, checkpoint)
+            else:
+                unknown_models.append(model)
+        return known_models, unknown_models
+
+    @deprecated(reason="not use", version="0.0.1")
+    def registeModelCallback(self, unknown_models: List[str], resource_namespace):
+        """向unknown_models注册通知
+
+        如果这些model的pipeline不在运行状态，则会间隔性的注册,  并且
+        """
+
+        data = {
+            "timestamp": get_timestamp(),
+            "model": self.component_msg['model_name'],
+            "resource_namespace": resource_namespace,
+        }
+        for model in unknown_models:
+            self.ensemble_feedback_flag[model] = data['timestamp']
+
+        while len(unknown_models) > 0:
+            model_pod_label = getPodLabelValue(self.component_msg['task_name'],
+                                               unknown_models)
+            model_hosts: dict[str, str] = getPodIpByLabel(
+                model_pod_label, resource_namespace)
+            logger.info("要通知的model host：{}".format(model_hosts))
+            logger.info('开始向要使用的模型发送消息：{}'.format(data))
+            # 开始并发的向unknown_models发送请求，如果有组件长时间没有响应，可以认为其pipeline没有运行
+            # 这里是为了保证在注册前，反馈队列里没有未处理的信息
+            self.ensemble_feedback_queue.join()
+            responses = asyncMsg([
+                "http://{}:{}/modelCallback".format(ip,
+                                                    global_config.SERVERPORT)
+                for ip in list(model_hosts.values())
+            ], data, 3, False)
+            ensure_model = {}
+            for status, json in responses:
+                if status == 200 and json["flag"]:
+                    ensure_model[json["model"]] = True
+            new_models = []
+            for model in unknown_models:
+                if ensure_model.get(ensure_model, False):
+                    continue
+                else:
+                    new_models.append(model)
+            unknown_models = new_models
+        logger.info('完成对上游模型的回调注册')
+
+    @deprecated(reason="not use", version="0.0.1")
+    def POST_modelCallback(self, req_handler: BaseHTTPRequestHandler):
+        """用一个队列不断地接受下游模型发送的注册通知
+        """
+        content_length = int(req_handler.headers['Content-Length'])
+        post_data = req_handler.rfile.read(content_length).decode(
+            'utf-8')  # <--- Gets the data itself
+        msg = dict(json.loads(post_data))
+        logger.info("收到来自{}的注册模型通知".format(msg['model']))
+        req_handler.send_response(200)
+        req_handler.send_header('Content-type', 'application/json')
+        req_handler.end_headers()
+        req_handler.wfile.write(json.dumps({
+            "model": self.component_msg['model_name'],
+            "timestamp": msg['timestamp'],
+            "flag": True
+        }).encode("utf-8"))
+        self.down_stream_model_update_queue.put(
+            (msg['model'], msg['timestamp'], msg['resource_namespace']))
 
 
 class CycleModelTrain(BaseComponent):
@@ -422,11 +629,11 @@ class CycleModelTrain(BaseComponent):
         """
         将依赖的模型加入到一个图之中，每个task会有一个模型依赖图DAG
         """
-        
-        print(getModelNodeList(task_name=task_name))
+
+        logger.info(getModelNodeList(task_name=task_name))
         updateUpStreamNode(
-            task_name=task_name, 
-            model_name=model_name, 
+            task_name=task_name,
+            model_name=model_name,
             up_stream_models=self._params["emsemble_models"]
         )
-        print(getModelNodeList(task_name=task_name))
+        logger.info(getModelNodeList(task_name=task_name))

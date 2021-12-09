@@ -28,7 +28,7 @@ def parse_component_to_container_entrypoint(component: base_component,
     d_artifact = {}  # 获取依赖的组件的artifact输出路径
     for c in component.upstreamComponents:
         if type(c) == global_component.GlobalComponent:
-            #如果是全局组件，他的目录就应该用真实的别名的组件的目录
+            # 如果是全局组件，他的目录就应该用真实的别名的组件的目录
             if c.id in Do_deploytype:
                 d_channels[c.id] = os.path.join(
                     c.artifact.url,
@@ -112,7 +112,7 @@ def db_update_pipeline_component(task_name, model_name,
     #       getattr(component, 'alias_component_id', None))
     db.update('.'.join(
         [task_name, model_name, component.id, 'alias_component']),
-              getattr(component, 'alias_component_id', None))  # 标记组件的依赖信息
+        getattr(component, 'alias_component_id', None))  # 标记组件的依赖信息
     if db.select('.'.join([task_name, model_name, component.id])) is None:
         return False
     else:
@@ -175,7 +175,7 @@ def recursive_get_global_component_alias_component(task_name: str,
     while db.select('.'.join([
             task_name, model_name, component_id, 'alias_model'
     ])) is not None and db.select('.'.join(
-        [task_name, model_name, component_id, 'alias_component'])) is not None:
+            [task_name, model_name, component_id, 'alias_component'])) is not None:
         new_model_name = db.select('.'.join(
             [task_name, model_name, component_id, 'alias_model']))
         new_component_id = db.select('.'.join(
@@ -262,3 +262,9 @@ def update_model_checkpoint(task_name: str, model_name: str, checkpoint: str):
 
 def get_model_checkpoint(task_name: str, model_name: str):
     return db.select(".".join([task_name, model_name, 'model_checkpoint']))
+
+
+def get_pipeline_component_artifact_url(task_name: str, model_name: str, component: str):
+    """获取某个组件的artifact目录
+    """
+    return os.path.join(global_config.OUTPUTSDIR, task_name, model_name, component, component_msg.Component_Data_URL.ARTIFACTS.value)

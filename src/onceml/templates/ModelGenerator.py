@@ -62,7 +62,7 @@ class ModelGenerator(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def train(self, file_list: List, ensemble_outout: Dict[str, list]) -> float:
+    def train(self, file_list: List, ensemble_model_dirs: Dict[str, str]) -> float:
         """
         description
         ---------
@@ -70,7 +70,7 @@ class ModelGenerator(abc.ABC):
         Args
         -------
         file_list：包含此次用于模型训练的文件url数组，可以是经过timestamp筛选后的文件，也可以是所有文件
-        
+        ensemble_model_dirs:上游模型的最新模型目录（可能因为pipeline的复杂部署问题，这里得到的文件夹被删除）
         
         Returns
         -------
@@ -129,13 +129,14 @@ class ModelGenerator(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def eval(self, file_list: List, ensemble_outout: Dict[str, list]) -> bool:
+    def eval(self, file_list: List, ensemble_model_dirs: Dict[str, str]) -> bool:
         """
         description
         ---------
         在已经存在一个模型的时候，如果新到来的数据经过这个eval验证，用户可以定义验证的过程，返回一个bool值，如果为true，则重新训练一个新模型，如果false，则跳过
         Args
         -------
+        ensemble_model_dirs:上游模型的最新模型目录（可能因为pipeline的复杂部署问题，这里得到的文件夹被删除）
         
         Returns
         -------

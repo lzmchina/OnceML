@@ -7,8 +7,8 @@ import onceml.global_config as global_config
 import onceml.utils.logger as logger
 import onceml.configs.k8sConfig as k8sConfig
 if os.getenv('{}ENV'.format(global_config.project_name)) == 'INPOD':
-    config.load_incluster_config()  #在pod里面
-else:  #在集群外
+    config.load_incluster_config()  # 在pod里面
+else:  # 在集群外
     try:
         config.load_kube_config()
     except:
@@ -27,11 +27,11 @@ def get_crd_instance_list(namespace: str, group: str, label_selector: str,
         label_selector=label_selector)
 
 
-def get_pods_by_label(namespace: str, label_selector: str)->List[client.V1Pod]:
+def get_pods_by_label(namespace: str, label_selector: str, timeout_seconds=3) -> List[client.V1Pod]:
     '''通过label selector在某个namespace找到相应的pod list
     '''
     return _k8s_client.list_namespaced_pod(namespace=namespace,
-                                           label_selector=label_selector).items or []
+                                           label_selector=label_selector, timeout_seconds=timeout_seconds).items or []
 
 
 def delete_crd_instance(namespace: str, group: str, name: str, version: str,
@@ -227,8 +227,10 @@ def get_nfs_svc_ip(NFS_SVC_NAME: str, namespace: str):
         return svc.spec.cluster_ip
     except:
         logger.logger.error('SVC {}不存在'.format(NFS_SVC_NAME))
+
+
 def get_ip_port_by_label(project: str, task_name: str, model_name: str,
-                         component_id: str,namespace:str,port:int):
+                         component_id: str, namespace: str, port: int):
     '''通过label找到一组pod的内部ip地址
     '''
     # logger.logger.info("{}={}".format(

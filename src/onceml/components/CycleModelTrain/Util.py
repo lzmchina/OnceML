@@ -70,6 +70,8 @@ def getTimestampFilteredFile(dir, file_pattern, start_timestamp, end_timestamp,
 
 def getEvalSampleFile(dir, file_pattern, start_file_id, end_file_id):
     '''获取验证模型用的文件list
+
+    返回二元组：文件包含目录路径的list，文件名的list
     '''
     file_name_pattern = re.compile(file_pattern)
     filtered_list_with_prefix = []
@@ -141,3 +143,12 @@ def getModelCheckpointFromDb(task_name, model):
         return -1
     else:
         return int(checkpoint)
+
+
+def getModelDir(task_name, model_name, checkpoint: int):
+    """获得模型某个checkpoint的目录
+    """
+    component_id = pipeline_utils.get_pipeline_model_component_id(
+        task_name, model_name).split(".")[-1]
+    artifact_dir=pipeline_utils.get_pipeline_component_artifact_url(task_name, model_name,component_id)
+    return os.path.join(artifact_dir,'checkpoints',str(checkpoint))
