@@ -16,7 +16,7 @@ import onceml.types.exception as exception
 import onceml.types.channel as channel
 from onceml.types.artifact import Artifact
 from onceml.utils.dir_utils import getLatestTimestampDir
-from .Util import _MIN_INT, getTimestampFilteredFile, getEvalSampleFile, getPodLabelValue, getPodIpByLabel, updateModelCheckpointToDb, checkModelList, diffFileList, getModelCheckpointFromDb, getModelDir
+from .Util import _MIN_INT, getTimestampFilteredFile, getEvalSampleFile, getModelPodLabelValue, getPodIpByLabel, updateModelCheckpointToDb, checkModelList, diffFileList, getModelCheckpointFromDb, getModelDir
 from onceml.utils.time import get_timestamp
 from queue import Queue
 from http.server import BaseHTTPRequestHandler
@@ -114,7 +114,7 @@ class _executor(BaseExecutor):
             best_model = None
             beat_metrics = _MIN_INT
             for _ in range(params['max_trial']):
-                model_generator=None
+                model_generator = None
                 if latest_checkpoint == -1:
                     model_generator: ModelGenerator = self.model_cls(None)
                 else:
@@ -177,6 +177,10 @@ class _executor(BaseExecutor):
             model_component_id=self.component_msg['component_id'])
 
         self.component_state = state  # 访问组件状态需要
+        self.lock.acquire()
+        for up_model in self.emsemble_models:
+            self.up_model_checkpoint[up_model] = -1
+        self.lock.release()
         """
         最开始的up model的 checkpoint都是-1
         1. 在pre_execute阶段会向up model所在的组件发送查询，得到能够响应的模型的版本信息
@@ -190,7 +194,7 @@ class _executor(BaseExecutor):
         self.broadcast_model_version()
 
     def broadcast_model_version(self):
-        """向下游组件广播自己的checkpoint
+        """向下游模型训练组件广播自己的checkpoint
         """
         cur = getModelNode(
             self.component_msg['task_name'], self.component_msg['model_name'])
@@ -198,8 +202,8 @@ class _executor(BaseExecutor):
             raise RuntimeError("模型{}在模型依赖图里没有对应的节点".format(
                 self.component_msg['model_name']))
         down_models = [node.model_name for node in cur.down_models]
-        model_pod_label = getPodLabelValue(self.component_msg['task_name'],
-                                           down_models)
+        model_pod_label = getModelPodLabelValue(self.component_msg['task_name'],
+                                                down_models)
         model_hosts: dict[str, str] = getPodIpByLabel(
             model_pod_label, self.component_msg['resource_namespace'])
         logger.info("要广播的model host：{}".format(model_hosts))
@@ -225,12 +229,9 @@ class _executor(BaseExecutor):
         1. 通过get的http请求查询组件的接口，如果返回结果，说明该模型的pipeline正在运行，得到的checkpoint也是最新的
         2. 第一步之后，可能部分模型获取不到结果，说明对应的pipeline还没开始运行，或者运行过但结束了，这时可以从数据库里进行更新
         """
-        self.lock.acquire()
-        for up_model in self.emsemble_models:
-            self.up_model_checkpoint[up_model] = -1
-        self.lock.release()
-        model_pod_label = getPodLabelValue(self.component_msg['task_name'],
-                                           self.emsemble_models)
+
+        model_pod_label = getModelPodLabelValue(self.component_msg['task_name'],
+                                                self.emsemble_models)
         model_hosts: dict[str, str] = getPodIpByLabel(
             model_pod_label, self.component_msg['resource_namespace'])
         logger.info("要更新模型版本的model host：{}".format(model_hosts))
@@ -265,14 +266,23 @@ class _executor(BaseExecutor):
         self.lock.acquire()
         model_checkpoints = self.up_model_checkpoint.items()
         self.lock.release()
-        for model, c in model_checkpoints:
-            ensemble_model_dirs[model] = getModelDir(
-                self.component_msg["task_name"], model, c)
-
-        filtered_list_with_prefix, _ = getTimestampFilteredFile(
-            samples_dir, '\d+-\d+.pkl', start_timestamp, end_timestamp,
-            recieved_file_id)
-
+        try:
+            for model, c in model_checkpoints:
+                ensemble_model_dirs[model] = getModelDir(
+                    self.component_msg["task_name"], model, c)
+        except Exception as e:
+            logger.error("获取模型ModelDir：{},{}出错".format(
+                ensemble_model_dirs, model_checkpoints))
+            logger.error(e)
+            raise e
+        try:
+            filtered_list_with_prefix, _ = getTimestampFilteredFile(
+                samples_dir, '\d+-\d+.pkl', start_timestamp, end_timestamp,
+                recieved_file_id)
+        except Exception as e:
+            logger.error("获取数据集出错")
+            logger.error(e)
+            raise e
         train_metrics = None
         try:
             train_metrics = model_generator.train(filtered_list_with_prefix,
@@ -314,7 +324,7 @@ class _executor(BaseExecutor):
             "model": self.component_msg["model_name"]
         }).encode("utf-8"))
         self.lock.acquire()
-        self.up_model_checkpoint["recieved_model"] = recieved_checkpoint
+        self.up_model_checkpoint[recieved_model] = recieved_checkpoint
         self.lock.release()
 
     @deprecated(reason="not use", version="0.0.1")
@@ -329,8 +339,8 @@ class _executor(BaseExecutor):
             self.component_msg['task_name'], model_list,
             self.component_state['ensemble_model_checkpoint'])
         #need_use_model = model_list
-        model_pod_label = getPodLabelValue(self.component_msg['task_name'],
-                                           need_use_model)
+        model_pod_label = getModelPodLabelValue(self.component_msg['task_name'],
+                                                need_use_model)
         data = {
             "timestamp": get_timestamp(),
             "file": file_list,
@@ -408,8 +418,8 @@ class _executor(BaseExecutor):
                 "checkpoint": current_checkpoint,
                 "timestamp": timestamp
             }
-        model_pod_label = getPodLabelValue(self.component_msg['task_name'],
-                                           [request_component])
+        model_pod_label = getModelPodLabelValue(self.component_msg['task_name'],
+                                                [request_component])
         need_again_send = True
         while need_again_send:
             model_hosts: dict[str,
@@ -522,8 +532,8 @@ class _executor(BaseExecutor):
             self.ensemble_feedback_flag[model] = data['timestamp']
 
         while len(unknown_models) > 0:
-            model_pod_label = getPodLabelValue(self.component_msg['task_name'],
-                                               unknown_models)
+            model_pod_label = getModelPodLabelValue(self.component_msg['task_name'],
+                                                    unknown_models)
             model_hosts: dict[str, str] = getPodIpByLabel(
                 model_pod_label, resource_namespace)
             logger.info("要通知的model host：{}".format(model_hosts))

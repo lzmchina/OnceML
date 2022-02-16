@@ -85,47 +85,39 @@ def getEvalSampleFile(dir, file_pattern, start_file_id, end_file_id):
     return filtered_list_with_prefix, filtered_list
 
 
-def getPodLabelValue(task_name, model_list):
-    '''获取某个pod的标签value
-    保证每个组件都能获得label value
+def getModelPodLabelValue(task_name, model_list):
+    '''获取某个model所在的pods的标签value
+    运行model的组件pod会在一开始update其pipeline中model_component_id,如果获取一个没有运行过的模型pipeline，则其对应的label不被添加
     '''
     model_pod_label = {}
     for model in model_list:
-        ensure = False
-        while not ensure:
-            component_id = pipeline_utils.get_pipeline_model_component_id(
-                task_name=task_name, model_name=model)
-            logger.logger.info("模型：{} 的模型组件为：{}".format(model, component_id))
-            if component_id is not None:
-                ensure = True
-                model_pod_label[model] = component_id
-            else:
-                time.sleep(5)
+        component_id = pipeline_utils.get_pipeline_model_component_id(
+            task_name=task_name, model_name=model)
+        logger.logger.info("模型：{} 的模型组件为：{}".format(model, component_id))
+        if component_id is not None:
+            model_pod_label[model] = component_id
     return model_pod_label
 
 
 def getPodIpByLabel(label_dict: dict, namespace):
     '''根据标签，获得对应组件pod的ip
-    保证host里面每一个均是有效的ip，然后才返回
+    不保证host里面是有效的ip，因为可能相应的pod没ready
     '''
     model_hosts = {}
     for model, label in label_dict.items():
-        ensure = False
-        while not ensure:
-            logger.logger.info("{}={}".format(k8sConfig.COMPONENT_POD_LABEL,
-                                              label))
-            pod_list = k8s_ops.get_pods_by_label(
-                namespace=namespace,
-                label_selector="{}={}".format(k8sConfig.COMPONENT_POD_LABEL,
-                                              label))
-            host_list = [pod.status.pod_ip for pod in pod_list]
-            logger.logger.info("模型：{} 的模型组件host为：{}".format(
-                model, ",".join(host_list)))
-            if len(host_list) > 0 and all([x[0] for x in host_list]):
-                ensure = True
-                model_hosts[model] = host_list[0]
-            else:
-                time.sleep(5)
+        logger.logger.info("{}={}".format(k8sConfig.COMPONENT_POD_LABEL,
+                                            label))
+        pod_list = k8s_ops.get_pods_by_label(
+            namespace=namespace,
+            label_selector="{}={}".format(k8sConfig.COMPONENT_POD_LABEL,
+                                            label))
+        host_list = [pod.status.pod_ip for pod in pod_list]
+        logger.logger.info("模型：{} 的模型组件host为：{}".format(
+            model, ",".join(host_list)))
+        if len(host_list) > 0 and all([x[0] for x in host_list]):
+            model_hosts[model] = host_list[0]
+        else:
+            time.sleep(5)
     return model_hosts
 
 

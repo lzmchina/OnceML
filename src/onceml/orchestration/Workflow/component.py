@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Protocol
 from kubernetes.client.models import V1VolumeMount, V1ContainerPort, V1Volume, V1EnvVar, V1PersistentVolumeClaimVolumeSource
 import onceml.components.base.base_component as base_component
 import onceml.utils.pipeline_utils as pipeline_utils
@@ -65,10 +65,27 @@ class OnceMLComponent:
             # 如果是Cycle，且不是global组件，则需要增加port配置
             # 因为global组件相当于他别名的组件的替身，可以看作是他别名的组件要向后继组件发送消息
             # if type(component) != global_component.GlobalComponent:
-            self.containerop.container.ports = [
-                V1ContainerPort(
-                    container_port=podconfigs.SERVERPORT)  # 开放端口
-            ]
+            if len(component.upstreamComponents)>0:
+                self.containerop.container.ports = [
+                    V1ContainerPort(
+                        name="onceml",
+                        container_port=podconfigs.SERVERPORT),  # 开放组件的http server端口,第0层是没有http server的
+                ]
+            extra_ports = component.extra_svc_port()
+            if extra_ports is not None:
+                if isinstance(extra_ports, list):
+                    for pair in extra_ports:
+                        name, protocol, port = pair
+                        if not all([isinstance(name, str), protocol.upper() in ["TCP", "UDP"], isinstance(port, int)]):
+                            raise Exception(
+                                "extra_svc_port  must return List[Tuple[str,str,int]] ")
+                        self.containerop.container.ports.append(
+                            V1ContainerPort(
+                                container_port=port,
+                                protocol=protocol.upper(),
+                                name=name))
+                else:
+                    raise Exception("extra_svc_port  must return list ")
             # 设置pod的label，保证Cycle类型的组件能够打上上游cycle组件的标签，这样上游组件就可以通过label来获取要发送
             # 的组件的list
             for c in component.upstreamComponents:

@@ -225,3 +225,12 @@ def componentDumps(obj):
 def componentLoads(s: str):
     """Loads a JSON into an object with Jsonable decoding."""
     return json.loads(s, cls=ComponentDecoder)
+
+def objectDumps(obj):
+    """Dumps an object to JSON with Jsonable encoding."""
+    return componentDumps(obj=obj)
+
+
+def objectLoads(s: str):
+    """Loads a JSON into an object with Jsonable decoding."""
+    return componentLoads(s)

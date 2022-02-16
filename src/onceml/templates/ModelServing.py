@@ -49,4 +49,4 @@ class ModelServing(abc.ABC):
         
         """
         
-        pass
+        raise Exception("must be inherited")

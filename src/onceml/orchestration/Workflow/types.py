@@ -25,7 +25,6 @@ class Containerop():
         self.container: Container = Container()
         self.labels: Dict[str, Any] = {}
         self.volumes: List[V1Volume] = []
-
     def add_pod_label(self, name: str, value: str):
         '''给pod增加label
         '''

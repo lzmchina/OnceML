@@ -11,7 +11,7 @@
 from onceml.types.artifact import Artifact
 from onceml.types.channel import Channels, OutputChannel
 from onceml.types.state import State
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
@@ -283,4 +283,9 @@ class BaseComponent(Jsonable):
         
         """
         raise Exception("must be extended")
-        
+    def extra_svc_port(self)->List[Tuple[str,str,int]]:
+        """组件的运行需要暴露的端口
+        有些时候，用户可能需要自己运行一个server一类的程序，这个时候需要暴露端口出去，因此可以返回一个list：
+        [("ts","TCP",8080),...],这里ts表示使用了torch serving框架
+        """
+        return None

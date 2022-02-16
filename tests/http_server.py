@@ -9,16 +9,18 @@ from onceml.utils.logger import logger
 import logging
 import queue
 logger.info("dsdd")
+server=None
 def shutdownFunction(signalnum, frame):
     print('You pressed Ctrl+C!')
-    sys.exit(0)
+    print(server)
+    server.shutdown
 
 import sys
 
 logging.error("ddd")
 def signal_handler(sig, frame):
     print('You pressed Ctrl+C!')
-    sys.exit(0)
+    
 
 
 for sig in [signal.SIGINT, signal.SIGTERM]:
@@ -45,6 +47,4 @@ class myHandler(BaseHTTPRequestHandler):
 PORT_NUM = 10087
 serverAddress = ("0.0.0.0", PORT_NUM)
 server = ThreadingHTTPServer(serverAddress, myHandler)
-#server.server_activate()
-q=queue.Queue()
-q.get()
+Thread(target=server.serve_forever, args=(10, )).start()

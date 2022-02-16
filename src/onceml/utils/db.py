@@ -3,14 +3,20 @@ import dbm.dumb
 import os
 import sys
 import onceml.global_config as global_config
-from  onceml.utils.kvdb import DataBase as kvDataBase
+from onceml.utils.kvdb import DataBase as kvDataBase
 
 _path = os.path.join(os.getcwd(), global_config.OUTPUTSDIR,
                      global_config.database_dir)
-os.makedirs(_path, exist_ok=True)
+
+
+def change_path_context(path: str):
+    global _path
+    _path = os.path.join(path, global_config.OUTPUTSDIR,
+                         global_config.database_dir)
 
 
 def init_db(path: str) -> kvDataBase:
+    os.makedirs(path, exist_ok=True)
     return kvDataBase(path)
 
 

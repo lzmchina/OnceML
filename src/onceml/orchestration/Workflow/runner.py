@@ -53,11 +53,10 @@ class OnceMLRunner(BaseRunner):
         self.project_name = project_name
         os.makedirs(os.path.join(self._output_dir, 'yamls'), exist_ok=True)
 
-    def construct_pipeline_graph(
-            self, pipeline: Pipeline) -> Dict[str, OnceMLComponent]:
+    def construct_pipeline_graph(self, pipeline: Pipeline) -> Dict[str, OnceMLComponent]:
         """
         """
-        component_to_kfp_op = {}
+        component_to_onceml_op = {}
         for component in pipeline.components:
             # 分配namespace
             component.resourceNamepace = self.namespace
@@ -66,8 +65,7 @@ class OnceMLRunner(BaseRunner):
             for upstreamComponent in component.upstreamComponents:
                 if upstreamComponent.deploytype == "Do":
                     Do_deploytype.append(upstreamComponent.id)
-                depends_on[upstreamComponent.id] = component_to_kfp_op[
-                    upstreamComponent.id]
+                depends_on[upstreamComponent.id] = component_to_onceml_op[upstreamComponent.id]
             workflow_component = OnceMLComponent(
                 task_name=pipeline._task_name,
                 model_name=pipeline._model_name,
@@ -75,8 +73,8 @@ class OnceMLRunner(BaseRunner):
                 Do_deploytype=Do_deploytype,
                 pvc_name=self.pvcname,
                 project_name=self.project_name)
-            component_to_kfp_op[component.id] = workflow_component
-        return component_to_kfp_op
+            component_to_onceml_op[component.id] = workflow_component
+        return component_to_onceml_op
 
     def deploy(self, pipeline: Pipeline):
         '''将一个pipeline编译成workfow的yaml资源,并提交(optional)
@@ -95,9 +93,9 @@ class OnceMLRunner(BaseRunner):
         for layer in pipeline.layerComponents:
             dag_layer = []
             for component in layer:
-                #cycle类型的GlobalComponent并不需要做出什么实际的动作
-                if type(component)==global_component.GlobalComponent and component.deploytype=="Cycle":
-                   continue
+                # cycle类型的GlobalComponent并不需要做出什么实际的动作
+                if type(component) == global_component.GlobalComponent and component.deploytype == "Cycle":
+                    continue
                 else:
                     dag_layer.append({
                         "name": component.id,

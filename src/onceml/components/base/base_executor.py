@@ -21,12 +21,14 @@ class BaseExecutor:
     BaseExecutor接收到组件的params、Channels、Artifact，以及依赖组件的Channels、Artifact
 
     """
+
     def __init__(self):
-        self.component_msg:dict={}
-        self.pod_label_value=""
+        # 组件的一些全局信息：project,task_name、model_name
+        self.component_msg: dict = {}
+        self.pod_label_value = ""
         pass
 
-    #print(self._type)
+    # print(self._type)
 
     # def __new__(cls):
 
@@ -60,7 +62,7 @@ class BaseExecutor:
 
         Raises
         -------
-        
+
         """
 
         pass
@@ -70,7 +72,7 @@ class BaseExecutor:
         Args
         -------
         state:组件的当前状态
-        
+
         params (dict):用户运行前确定的参数
 
         data_dir:提供给用户保存数据用额目录
@@ -112,7 +114,7 @@ class BaseExecutor:
 
         Raises
         -------
-        
+
         """
 
         pass
@@ -120,4 +122,9 @@ class BaseExecutor:
     @property
     def type(self):
         return self._type
-    
+
+    def exit_execute(self):
+        """执行器结束运行后的逻辑
+        用户可能在pre_execute时期开启一些进程，这个时候需要在主进程结束后，将子进程也关闭
+        """
+        pass

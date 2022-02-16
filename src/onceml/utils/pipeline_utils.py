@@ -254,7 +254,22 @@ def update_pipeline_model_component_id(project_name: str, task_name: str,
         '.'.join([task_name, model_name, 'model_component']),
         ".".join([project_name, task_name, model_name, model_component_id]))
 
-
+def update_pipeline_model_serving_component_id(project_name: str, task_name: str,
+                                       model_name: str,
+                                       model_component_id: str):
+    """更新model serving的component id
+    """
+    db.update(
+        '.'.join([task_name, model_name, 'serving_component']),
+        ".".join([project_name, task_name, model_name, model_component_id]))
+def delete_pipeline_model_serving_component_id(project_name: str, task_name: str,
+                                       model_name: str,
+                                       model_component_id: str):
+    """删除model serving的component id
+    """
+    db.delete('.'.join([task_name, model_name, 'serving_component']))
+def get_pipeline_model_serving_component_id(task_name: str, model_name: str):
+    return db.select('.'.join([task_name, model_name, 'serving_component']))
 def update_model_checkpoint(task_name: str, model_name: str, checkpoint: str):
     db.update(".".join([task_name, model_name, 'model_checkpoint']),
               checkpoint)

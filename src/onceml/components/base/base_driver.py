@@ -84,16 +84,16 @@ def generate_handler(driver_instance, route_rules: Dict[str, Dict[str,
             '''用来充当server的get处理
             '''
 
-            #print(self.path)
-            #logger.logger.debug(self.path)
+            # print(self.path)
+            # logger.logger.debug(self.path)
             #message = "Hello, World! Here is a GET response"
             #self.wfile.write(bytes(message, "utf8"))
             if self._route[BaseDriverApiType.GET.value].get(self.path,
-                                                            None):  #路由匹配
+                                                            None):  # 路由匹配
                 self._route[BaseDriverApiType.GET.value].get(self.path)(
-                    self)  #执行相应的控制逻辑
+                    self)  # 执行相应的控制逻辑
             elif self.path == '/':
-                #匹配/，执行默认流程,用于通信
+                # 匹配/，执行默认流程,用于通信
                 self._set_html_response()
                 self.wfile.write(
                     "Hello, World! Here is a GET response".encode('utf-8'))
@@ -106,16 +106,16 @@ def generate_handler(driver_instance, route_rules: Dict[str, Dict[str,
             '''用来充当server的post处理
             '''
             if self._route[BaseDriverApiType.POST.value].get(self.path,
-                                                             None):  #路由匹配
+                                                             None):  # 路由匹配
                 self._route[BaseDriverApiType.POST.value].get(self.path)(
-                    self)  #执行相应的控制逻辑
+                    self)  # 执行相应的控制逻辑
             elif self.path == '/':
-                #匹配/，执行默认流程,用于通信
-                #method1 获取post提交的数据
+                # 匹配/，执行默认流程,用于通信
+                # method1 获取post提交的数据
                 # datas = self.rfile.read(int(self.headers['content-length']))
                 # datas = urllib.unquote(datas).decode("utf-8", 'ignore')
 
-                #method2 <--- Gets the size of data
+                # method2 <--- Gets the size of data
                 content_length = int(self.headers['Content-Length'])
                 post_data = self.rfile.read(content_length).decode(
                     'utf-8')  # <--- Gets the data itself
@@ -132,16 +132,16 @@ def generate_handler(driver_instance, route_rules: Dict[str, Dict[str,
             '''
             logger.logger.debug(self.path)
             if self._route[BaseDriverApiType.PUT.value].get(self.path,
-                                                            None):  #路由匹配
+                                                            None):  # 路由匹配
                 self._route[BaseDriverApiType.PUT.value].get(self.path)(
-                    self)  #执行相应的控制逻辑
+                    self)  # 执行相应的控制逻辑
             elif self.path == '/':
-                #匹配/，执行默认流程,用于通信
-                #method1 获取post提交的数据
+                # 匹配/，执行默认流程,用于通信
+                # method1 获取post提交的数据
                 # datas = self.rfile.read(int(self.headers['content-length']))
                 # datas = urllib.unquote(datas).decode("utf-8", 'ignore')
 
-                #method2 <--- Gets the size of data
+                # method2 <--- Gets the size of data
                 content_length = int(self.headers['Content-Length'])
                 post_data = self.rfile.read(content_length).decode(
                     'utf-8')  # <--- Gets the data itself
@@ -203,8 +203,7 @@ class BaseDriver(abc.ABC):
         self._executor.component_msg['task_name'] = pipeline_root[0]
         self._executor.component_msg['model_name'] = pipeline_root[1]
         self._executor.component_msg['component_id'] = component.id
-        self._executor.component_msg[
-            'resource_namespace'] = component.resourceNamepace
+        self._executor.component_msg['resource_namespace'] = component.resourceNamepace
         if self._runtype == BaseDriverRunType.DO.value:
             self._executor_func = self._executor.Do
         else:
@@ -213,7 +212,7 @@ class BaseDriver(abc.ABC):
         self._upstream_tmp_msg: Dict[str, dict] = {}
         # Cycle类型的组件不仅要接收前面的组件的消息，并储存，还要另外的循环执行Cycle逻辑，因此消息的存储与消耗是需要用锁控制的
         self._upstream_msg_queue_lock: threading.Lock = None
-        #消息队列，用于下游组件
+        # 消息队列，用于下游组件
         self._upstream_msg_queue: Queue = Queue(maxsize=1)
         # 组件是否在execute
         self._is_execute = False
@@ -343,15 +342,15 @@ class BaseDriver(abc.ABC):
         '''将某个上游cycle组件传来的消息放入队列里
         '''
         is_change = False
-        #logger.logger.info(msg_dict)
-        #logger.logger.info(msg_dict['timestamp'])
+        # logger.logger.info(msg_dict)
+        # logger.logger.info(msg_dict['timestamp'])
         self._upstream_msg_queue_lock.acquire()
-        if self._upstream_tmp_msg[key] is None:
+        if self._upstream_tmp_msg.get(key, None) is None:
             self._upstream_tmp_msg[key] = msg_dict
             is_change = True
         else:
-            #当上游组件是重发的时候，就需要比较timestamp，只有新的消息才会存储
-            #logger.logger.info("tmp:{}".format(self._upstream_tmp_msg[key]))
+            # 当上游组件是重发的时候，就需要比较timestamp，只有新的消息才会存储
+            # logger.logger.info("tmp:{}".format(self._upstream_tmp_msg[key]))
             if msg_dict['timestamp'] > self._upstream_tmp_msg[key]['timestamp']:
                 self._upstream_tmp_msg[key] = msg_dict
                 is_change = True
@@ -361,7 +360,7 @@ class BaseDriver(abc.ABC):
                     self._upstream_msg_queue.get_nowait()
                 except:
                     logger.logger.info("队列为空了，应该被组件取走了")
-            #logger.logger.info("有上游新的消息：{}".format(self._upstream_tmp_msg))
+            # logger.logger.info("有上游新的消息：{}".format(self._upstream_tmp_msg))
             self._upstream_msg_queue.put(copy.deepcopy(self._upstream_tmp_msg))
         self._upstream_msg_queue_lock.release()
 
@@ -370,7 +369,7 @@ class BaseDriver(abc.ABC):
     def pop_all_msg(self):
         '''获得目前的所有上游cycle类型的消息
         '''
-        #这里如果没有消息就会block住
+        # 这里如果没有消息就会block住
         result = self._upstream_msg_queue.get()
         return result
 
@@ -396,15 +395,19 @@ class BaseDriver(abc.ABC):
 
         executor应该由开发者二次继承开发
         """
-
-        return self._executor_func(state=self._component.state,
-                                   params=self._component._params,
-                                   data_dir=os.path.join(
-                                       global_config.OUTPUTSDIR,
-                                       self._component.artifact.url,
-                                       Component_Data_URL.ARTIFACTS.value),
-                                   input_channels=input_channels,
-                                   input_artifacts=input_artifacts)
+        result = None
+        try:
+            result = self._executor_func(state=self._component.state,
+                                         params=self._component._params,
+                                         data_dir=os.path.join(
+                                             global_config.OUTPUTSDIR,
+                                             self._component.artifact.url,
+                                             Component_Data_URL.ARTIFACTS.value),
+                                         input_channels=input_channels,
+                                         input_artifacts=input_artifacts)
+        except Exception as e:
+            logger.logger.error("_executor_func error:{}".format(e))
+        return result
 
     def send_channels(self, validated_channels: Dict):
         '''将经过验证的结果发送给后续cycle节点（如果有的话）
@@ -459,7 +462,7 @@ class BaseDriver(abc.ABC):
         -------
 
         """
-        #注册信号处理
+        # 注册信号处理
         for sig in [signal.SIGINT, signal.SIGTERM]:
             signal.signal(sig, self.shutdownHandler)
         # 先获取上游节点中的Do类型的结果，因为这些都是已经确定的
@@ -496,7 +499,7 @@ class BaseDriver(abc.ABC):
                                            self._component.artifact.url,
                                            Component_Data_URL.ARTIFACTS.value))
             # 将state保存
-            #self._component.state.dump()
+            # self._component.state.dump()
             # 然后再根据组件是否有cycle类型的上游组件来进行后面的操作
             # 如果是没有cycle上游组件，则认为他是信号源，需要不断的执行，并向后发送消息
             # 如果有，则认为他是由前面cycle组件驱动的
@@ -518,10 +521,9 @@ class BaseDriver(abc.ABC):
                     # 再对channel_result里的结果进行数据校验，只要channel_types里的字段
                     validated_channels = self.data_type_validate(
                         types_dict=channel_types, data=channel_result)
-                   
+
                     # 将结果发送给后续cycle节点(如果有的话)
                     self.send_channels(validated_channels)
-                    
 
             else:
                 logger.logger.info('该组件受到前面组件信号的控制')
@@ -588,8 +590,12 @@ class BaseDriver(abc.ABC):
         '''
         logger.logger.warning('收到终止信号')
         logger.logger.warning('开始清理组件的状态')
+        # 停止某个thread里的http server
+        self.server.shutdown()
         pipeline_utils.db_reset_pipeline_component_phase(
-            self._pipeline_root[0], self._pipeline_root[1],self._component.id)
+            self._pipeline_root[0], self._pipeline_root[1], self._component.id)
+        # 执行组件的exit_execute
+        self._executor.exit_execute()
         sys.exit(0)
 
     def restore_state(self, component_dir: str):
