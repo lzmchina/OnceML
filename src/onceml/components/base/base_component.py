@@ -16,12 +16,13 @@ from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
 from enum import Enum
-
-
+from deprecated.sphinx import deprecated
 class BaseComponentDeployType(Enum):
     DO = 'Do'
     CYCLE = 'Cycle'
-
+class PodContainer():
+    def __init__(self) -> None:
+        pass
 
 class BaseComponent(Jsonable):
     """BaseComponent是最基本的组件
@@ -283,9 +284,35 @@ class BaseComponent(Jsonable):
         
         """
         raise Exception("must be extended")
-    def extra_svc_port(self)->List[Tuple[str,str,int]]:
+    
+    def extra_svc_port_internal(self)->List[Tuple[str,str,int]]:
         """组件的运行需要暴露的端口
-        有些时候，用户可能需要自己运行一个server一类的程序，这个时候需要暴露端口出去，因此可以返回一个list：
+        有些时候，框架由于拓展性，组件可能需要自己运行一个server一类的程序，这个时候需要暴露端口出去，因此可以返回一个list：
         [("ts","TCP",8080),...],这里ts表示使用了torch serving框架
         """
-        return None
+        return []
+    def extra_svc_port_user(self)->List[Tuple[str,str,int]]:
+        """用户需要暴露的端口
+        """
+        return []
+    def extra_pod_containers_internal(self)->List[PodContainer]:
+        """框架需要的其他容器
+        description
+        ---------
+        如果组件需要运行其他的服务，可以将其他的进程运行在其他的容器里。正常而言是不需要再运行
+        其他服务，但举个例子，modelserving组件需要torchserving这么一个进程
+        Args
+        -------
+        
+        Returns
+        -------
+        
+        Raises
+        -------
+        
+        """
+        return []
+    def extra_pod_containers_user(self)->List[PodContainer]:
+        """用户需要的容器
+        """
+        return []

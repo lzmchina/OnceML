@@ -19,16 +19,16 @@ def outputMar(model_name: str, handler: str, extra_file: str, export_path: str, 
     return True
 
 
-def run_ts_serving(ts_config_file: str, model_store: str, foreground: bool = False) -> subprocess.Popen:
+def run_ts_serving(ts_config_file: str, model_store: str, foreground: bool = True) -> subprocess.Popen:
     """开启一个子进程，运行torch serving
     1. ts_config_file:torch serving的配置文件路径
     2. model_store:模型
     3. foreground:是否在前端等待
     """
     if foreground:
-        foreground = ""
-    else:
         foreground = "--foreground"
+    else:
+        foreground = ""
     process = subprocess.Popen(
         ["torchserve", "--start", "--ncs", foreground, "--ts-config", ts_config_file, "--model-store", model_store], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     return process

@@ -1,11 +1,14 @@
+import json
 from logging import Logger, log
 import time
 from onceml.utils import pipeline_utils
-from onceml.utils.http import syncPost
+from onceml.utils.http import syncPost, syncGet
 from onceml.types.ts_config import TsConfig
 from onceml.utils.logger import logger
+from onceml.thirdParty.PyTorchServing import TS_MANAGEMENT_PORT
 
-def registerModelJob(url: str, handler: str, initial_workers=1,maxtry=5) -> bool:
+
+def registerModelJob(url: str, handler: str, initial_workers=1, maxtry=5) -> bool:
     """向ts serving注册一个model serving
     1. url:.mar压缩包的路径(相对于model store文件夹)
     2. handler:server handler的py文件路径
@@ -17,9 +20,9 @@ def registerModelJob(url: str, handler: str, initial_workers=1,maxtry=5) -> bool
     logger.info(url+" "+handler)
     while maxtry > 0:
         try:
-            reponse = syncPost("http://127.0.0.1:{}/models".format(8081), data={
+            reponse = syncPost("http://127.0.0.1:{}/models".format(TS_MANAGEMENT_PORT), data={
                 "url": url,
-                #"handler": handler,
+                # "handler": handler,
                 "initial_workers": initial_workers
             })
             logger.info(reponse.text)
@@ -30,6 +33,57 @@ def registerModelJob(url: str, handler: str, initial_workers=1,maxtry=5) -> bool
         except Exception as e:
             logger.error(e)
         time.sleep(2)
+        maxtry -= 1
+    return False
+
+
+def tryRegisterModelJob(url: str, handler: str, initial_workers=1) -> bool:
+    """尝试向ts serving注册一个model serving
+    可能存在版本冲突（code 409），不保证一定200
+    1. url:.mar压缩包的路径(相对于model store文件夹)
+    2. handler:server handler的py文件路径
+    3. initial_workers:初始化的worker
+    return:
+
+    """
+
+    logger.info(url+" "+handler)
+    try:
+        reponse = syncPost("http://127.0.0.1:{}/models".format(TS_MANAGEMENT_PORT), data={
+            "url": url,
+            # "handler": handler,
+            "initial_workers": initial_workers
+        })
+        logger.info(reponse.text)
+        if reponse.status_code == 200:
+            return True
+        elif reponse.status_code == 409:
+            return False
+        else:
+            return False
+    except Exception as e:
+        logger.error(e)
+    return False
+
+
+def queryModelIsExist(model: str, maxtry=3, internal=2) -> bool:
+    """向ts serving查询某个model是否存在
+    return:
+    """
+    while maxtry > 0:
+        try:
+            reponse = syncGet("http://127.0.0.1:{}/models".format(TS_MANAGEMENT_PORT))
+            if reponse.status_code == 200:
+                res_json = json.loads(reponse.text)
+                for model in res_json["models"]:
+                    if model["modelName"] == model:
+                        return True
+                return False
+            else:
+                return False
+        except Exception as e:
+            logger.error(e)
+        time.sleep(internal)
         maxtry -= 1
     return False
 
@@ -67,7 +121,8 @@ def get_svc_name(project_name, task_name, model_name):
     """获得project_name下的task_name下的model_name对应的serving svc
     必须与workflow operator的svc名字生成方式一致
     """
-    component=pipeline_utils.get_pipeline_model_serving_component_id(task_name, model_name)
+    component = pipeline_utils.get_pipeline_model_serving_component_id(
+        task_name, model_name)
     if component is None:
         return ""
-    return component.replace(".","-")
+    return component.replace(".", "-")

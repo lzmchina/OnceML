@@ -4,6 +4,7 @@ import subprocess
 import time
 from typing import ClassVar, Dict, List, Optional, Tuple
 from onceml.components.base import BaseComponent, BaseExecutor
+from onceml.orchestration.Workflow.types import PodContainer
 from onceml.types.artifact import Artifact
 from onceml.types.channel import Channels
 from onceml.types.state import State
@@ -14,12 +15,15 @@ from onceml.templates import ModelServing
 import json
 from onceml.utils.logger import logger
 from onceml.thirdParty.PyTorchServing import run_ts_serving, outputMar
-from onceml.thirdParty.PyTorchServing import TS_PROPERTIES_PATH, TS_INFERENCE_PORT
-from .Utils import generate_onceml_config_json, registerModelJob, get_handler_path, get_handler_module
+from onceml.thirdParty.PyTorchServing import TS_PROPERTIES_PATH, TS_INFERENCE_PORT, TS_MANAGEMENT_PORT
+from .Utils import generate_onceml_config_json, queryModelIsExist, registerModelJob, get_handler_path, get_handler_module
 import pathlib
 from onceml.utils.json_utils import objectDumps
 import onceml.global_config as global_config
 import onceml.utils.pipeline_utils as pipeline_utils
+from deprecated.sphinx import deprecated
+from onceml.types.component_msg import Component_Data_URL
+
 
 class _executor(BaseExecutor):
     def __init__(self):
@@ -33,6 +37,7 @@ class _executor(BaseExecutor):
         # 当前正在serving的实例
         self.model_serving_instance: ModelServing = None
         self._ts_process = None
+        self.model_timer_thread = None
 
     @property
     def ts_process(self) -> subprocess.Popen:
@@ -50,6 +55,16 @@ class _executor(BaseExecutor):
         training_channels = list(input_channels.values())[0]
         latest_checkpoint = state["model_checkpoint"]
         if training_channels["checkpoint"] <= latest_checkpoint:
+            # 尝试提交最新的model
+            if not queryModelIsExist(self.component_msg["model_name"]):
+                mar_file = os.path.join(
+                    data_dir, "{}-{}.mar".format(self.component_msg["model_name"], str(state["model_checkpoint"])))
+                if os.path.exists(mar_file):
+                    if not registerModelJob(
+                        url=os.path.abspath(mar_file),
+                        handler=get_handler_module()
+                    ):
+                        logger.error("register failed")
             return None
         to_use_model_dir = os.path.join(list(input_artifacts.values())[
                                         0].url, "checkpoints", str(training_channels["checkpoint"]))
@@ -78,19 +93,42 @@ class _executor(BaseExecutor):
         state["model_checkpoint"] = training_channels["checkpoint"]
         return None
 
+    @deprecated(reason="not use", version="0.0.1")
+    def register_model_timer(self, state, data_dir):
+        '''注册模型的定时器
+        现在的torch serving有一些问题：进程莫名退出，这时候pod的相应容器会自动重启，然后需要main容器里的框架定时进行注册
+        '''
+        def put_model():
+            #尝试提交 .mar
+            while True:
+                # 先查询
+                if not queryModelIsExist(self.component_msg["model_name"]):
+                    mar_file = os.path.join(
+                        data_dir, "{}-{}.mar".format(self.component_msg["model_name"], str(state["model_checkpoint"])))
+                    if os.path.exists(mar_file):
+                        if not registerModelJob(
+                            url=os.path.abspath(mar_file),
+                            handler=get_handler_module()
+                        ):
+                            logger.error("register failed")
+                time.sleep(2)
+        # 创建线程
+        self.model_timer_thread = threading.Thread(target=put_model)
+
     def pre_execute(self, state: State, params: dict, data_dir: str):
         self.ensemble_models = params["ensemble_models"]
         self.model_serving_cls: type = params["model_serving_cls"]
         # 启动ts serving进程
-        self.ts_process = run_ts_serving(
-            TS_PROPERTIES_PATH, model_store=os.path.abspath(data_dir))
+        # self.ts_process = run_ts_serving(
+        #     TS_PROPERTIES_PATH, model_store=os.path.abspath(data_dir))
+
         initial_mar_file = os.path.join(
             data_dir,
             "{}-{}.mar".format(self.component_msg["model_name"], str(state["model_checkpoint"])))
 
         if os.path.exists(initial_mar_file):
             # 提交一个.mar文件到ts serving
-            if not registerModelJob(url=initial_mar_file, handler=get_handler_module(),maxtry=10):
+            if not registerModelJob(url=initial_mar_file, handler=get_handler_module(), maxtry=10):
                 logger.error("register failed")
         # 生成handler的runtime 的配置onceml_config.json
         with open(os.path.join(data_dir, "onceml_config.json"), "w") as f:
@@ -106,6 +144,8 @@ class _executor(BaseExecutor):
             self.component_msg["task_name"],
             self.component_msg["model_name"],
             self.component_msg['component_id'])
+
+    @deprecated(reason="not use", version="0.0.1")
     def exit_execute(self):
         """结束时，也停止响应的ts serving进程
         """
@@ -114,7 +154,8 @@ class _executor(BaseExecutor):
             self.ts_process.wait()
             self.ts_process.kill()
 
-    def POST_predict(self, req_handler: BaseHTTPRequestHandler):
+    @deprecated(reason="not use", version="0.0.1")
+    def _POST_predict(self, req_handler: BaseHTTPRequestHandler):
         content_length = int(req_handler.headers['Content-Length'])
         post_data = req_handler.rfile.read(content_length).decode(
             'utf-8')  # <--- Gets the data itself
@@ -152,5 +193,22 @@ class CycleModelServing(BaseComponent):
             "model_checkpoint": -1,  # 当前使用的模型的版本号（用模型的时间戳来辨别）
         }
 
-    def extra_svc_port(self) -> List[Tuple[str, int]]:
+    def extra_svc_port_internal(self) -> List[Tuple[str, str, int]]:
         return [("ts", "TCP", TS_INFERENCE_PORT)]
+
+    def extra_pod_containers_internal(self) -> List[PodContainer]:
+        '''
+        注册torch serving
+        '''
+        frameworks = super().extra_pod_containers_internal()
+        ts = PodContainer("ts")
+        ts.command = ['python']
+        ts.args = ["-m", "onceml.thirdParty.PyTorchServing.initProcess",
+                   "--model_store",
+                   "{}".format(os.path.join(
+                       global_config.OUTPUTSDIR,
+                       self.artifact.url,
+                       Component_Data_URL.ARTIFACTS.value))]
+        ts.SetReadinessProbe([str(TS_INFERENCE_PORT), "/ping"])
+        ts.SetLivenessProbe([str(TS_INFERENCE_PORT), "/ping"])
+        return frameworks+[ts]

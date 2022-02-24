@@ -1,6 +1,6 @@
-from .PyTorchServingHandler import ModelHandler
 from .TorchServingUtils import outputMar,run_ts_serving
 from .config import inference_port as TS_INFERENCE_PORT
+from .config import management_port as TS_MANAGEMENT_PORT
 import os
 import string
 TS_PROPERTIES_FILE = "ts.properties"
