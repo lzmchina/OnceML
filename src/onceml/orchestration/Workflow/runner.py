@@ -1,15 +1,15 @@
 from collections import OrderedDict
 from typing import Dict
-from onceml.orchestration.runner import BaseRunner
-from onceml.orchestration import Pipeline
-import onceml.utils.pipeline_utils as pipeline_utils
+from onceml.orchestration.base.runner import BaseRunner
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 import os
 import onceml.global_config as global_config
 from onceml.orchestration.Workflow.component import OnceMLComponent
 from onceml.orchestration.Workflow.types import Workflow
-from onceml.components.base import BaseComponent, global_component
+from onceml.components.base import BaseComponent, GlobalComponent
 import yaml
 import kubernetes.utils as k8s_utils
+from .config import generate_workflow_name
 
 
 class OnceMLRunner(BaseRunner):
@@ -53,7 +53,7 @@ class OnceMLRunner(BaseRunner):
         self.project_name = project_name
         os.makedirs(os.path.join(self._output_dir, 'yamls'), exist_ok=True)
 
-    def construct_pipeline_graph(self, pipeline: Pipeline) -> Dict[str, OnceMLComponent]:
+    def construct_pipeline_graph(self,  pipeline) -> Dict[str, OnceMLComponent]:
         """
         """
         component_to_onceml_op = {}
@@ -72,11 +72,12 @@ class OnceMLRunner(BaseRunner):
                 component=component,
                 Do_deploytype=Do_deploytype,
                 pvc_name=self.pvcname,
-                project_name=self.project_name)
+                project_name=self.project_name,
+                docker_image=self.docker_image)
             component_to_onceml_op[component.id] = workflow_component
         return component_to_onceml_op
 
-    def deploy(self, pipeline: Pipeline):
+    def deploy(self, pipeline):
         '''将一个pipeline编译成workfow的yaml资源,并提交(optional)
 
         '''
@@ -86,15 +87,14 @@ class OnceMLRunner(BaseRunner):
 
         pipeline.db_store()
         # 编译成workflow资源
-        workflow = Workflow("{project}.{}".format(pipeline.id,
-                                                  project=self.project_name))
+        workflow = Workflow(generate_workflow_name(self.project_name, pipeline.id))
         for c in self.construct_pipeline_graph(pipeline=pipeline).values():
             workflow.add_component(c.containerop)
         for layer in pipeline.layerComponents:
             dag_layer = []
             for component in layer:
                 # cycle类型的GlobalComponent并不需要做出什么实际的动作
-                if type(component) == global_component.GlobalComponent and component.deploytype == "Cycle":
+                if type(component) == GlobalComponent and component.deploytype == "Cycle":
                     continue
                 else:
                     dag_layer.append({
@@ -109,7 +109,7 @@ class OnceMLRunner(BaseRunner):
         # 对数据库中的信息进行更新
         # self.db_store(pipeline)
 
-    def db_store(self, pipeline: Pipeline):
+    def db_store(self, pipeline):
         '''将phase更新
         '''
         pipeline_utils.change_pipeline_phase_to_created(pipeline.id)

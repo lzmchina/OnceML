@@ -13,13 +13,13 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 from typing import List, Optional, Text, Dict
-from onceml.components.base import BaseComponent, BaseExecutor, base_component
+from onceml.components.base import BaseComponent, BaseExecutor
 from onceml.utils.topsort import topsorted_layers
 import os
 import onceml.types.exception as exception
-import onceml.utils.pipeline_utils as pipeline_utils
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 from onceml.utils.json_utils import Jsonable
-from onceml.components.base.global_component import GlobalComponent
+from onceml.components.base.base_component import GlobalComponent
 from onceml.utils.logger import logger
 import onceml.global_config as global_config
 
@@ -105,22 +105,23 @@ class Pipeline():
         ---------
         按照components顺序执行组件的静态检测函数static_check()
 
-        
+
         Args有些组件需要在本地静态执行时，进行一些静态的操作。比如model generator组件，需要构建task的全局模型
         依赖图model DAG，同时需要检测当增加一个模型依赖节点后，这个DAG是否会出现错误
         -------
-        
+
         Returns
         -------
-        
+
         Raises
         -------
-        
+
         """
         for c in self.components:
-            #只有重载了函数才会执行
-            if c.__class__.static_check!=BaseComponent.static_check:
-                c.static_check(self._task_name,self._model_name)
+            # 只有重载了函数才会执行
+            if c.__class__.static_check != BaseComponent.static_check:
+                c.static_check(self._task_name, self._model_name)
+
     @property
     def rootdir(self) -> str:
         '''pipine结果存放的目录*/{task name}/{model name}
@@ -145,14 +146,7 @@ class Pipeline():
     def id(self, tuple_name: tuple):
         '''pipeline的唯一id，{task name}_{model name}
         '''
-        chars = set('-_/')
-        task_name, model_name = tuple_name[0], tuple_name[1]
-        if any((c in chars) for c in task_name) or any(
-                (c in chars) for c in model_name):
-            raise RuntimeError(
-                "pipeline的task name:%s 或者 model name:%s不能包含 '{}'符号 " %
-                (task_name, model_name, chars))
-        self._id = (str(task_name + '.' + model_name)).lower()
+        self._id = pipeline_utils.generate_pipeline_id(tuple_name[0], tuple_name[1])
         self.rootdir = tuple_name
 
     @property
@@ -206,7 +200,7 @@ class Pipeline():
             logger.info('第 %d 层' % index)
             for component in layer:
                 logger.info('component id %s' % component.id)
-                #设置下topo index
+                # 设置下topo index
                 component.topoLayerIndex = index
                 # 同时利用cache机制，判断是否可以利用之前的数据
                 pipeline_utils.compare_component(self._task_name,
@@ -272,13 +266,13 @@ class Pipeline():
                 component.alias_component_id)
             component.alias_component_id = origin_component
             component.alias_model_name = origin_model
-            #component.deploytype='Do'
+            # component.deploytype='Do'
         else:
             # 说明是普通的组件，直接通过executor class的信息判断
-            if (bool(component._executor_cls.Do == BaseExecutor.Do) == bool(
-                    component._executor_cls.Cycle == BaseExecutor.Cycle)):
+            if (bool(component._executor.__class__.Do == BaseExecutor.Do) == bool(
+                    component._executor.__class__.Cycle == BaseExecutor.Cycle)):
                 raise SyntaxError('Do与Cycle必须有且只能有一个被重写')
-            if (component._executor_cls.Do != BaseExecutor.Do):
+            if (component._executor.__class__.Do != BaseExecutor.Do):
                 component.deploytype = 'Do'
             else:
                 component.deploytype = 'Cycle'

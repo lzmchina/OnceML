@@ -8,21 +8,27 @@
 
 @version	:0.0.1
 '''
+from onceml import global_config
 from onceml.types.artifact import Artifact
 from onceml.types.channel import Channels, OutputChannel
 from onceml.types.state import State
 from typing import Any, Dict, List, Optional, Tuple
+from onceml.utils.leaderElection.configs import INSTANCEID_ENV, IP_ENV, LEADERURL, NAMESPACE_ENV, PORT, leader_election_id_format, IMAGE
+
+from onceml.utils.leaderElection.utils import NameForComponentLeaseName
 from .base_executor import BaseExecutor
 from onceml.utils.json_utils import Jsonable
 import onceml.types.exception as exception
 from enum import Enum
 from deprecated.sphinx import deprecated
+import onceml.types.type_check as type_check
+from onceml.orchestration.Workflow.types import PodContainer
+
+
 class BaseComponentDeployType(Enum):
     DO = 'Do'
     CYCLE = 'Cycle'
-class PodContainer():
-    def __init__(self) -> None:
-        pass
+
 
 class BaseComponent(Jsonable):
     """BaseComponent是最基本的组件
@@ -33,7 +39,7 @@ class BaseComponent(Jsonable):
     """
 
     def __init__(self,
-                 executor: BaseExecutor.__class__,
+                 executor: BaseExecutor,
                  inputs: Optional[List] = None,
                  shared: bool = False,
                  **args):
@@ -65,9 +71,9 @@ class BaseComponent(Jsonable):
         TypeError:没有按照给定的参数类型来构造
         """
 
-        if not issubclass(executor, BaseExecutor):
-            raise TypeError('传入的executor不是BaseExecutor class')
-        if inputs is not None and type(inputs)!=list:
+        if not isinstance(executor, BaseExecutor):
+            raise TypeError('传入的executor实例不是BaseExecutor类或子类')
+        if inputs is not None and type(inputs) != list:
             raise TypeError("组件的inputs必须是list")
         self._dependentComponent: List[BaseComponent] = inputs or []
         for c in self._dependentComponent:
@@ -92,7 +98,7 @@ class BaseComponent(Jsonable):
         self._dependentChannels = {}
         self._dependentArtifacts = {}
         # 拿到executor class
-        self._executor_cls = executor
+        self._executor = executor
         self._deploytype = None
         # 检查executor class是否只重写了一个函数
         # if (bool(self._executor_cls.Do==BaseExecutor.Do)==bool(self._executor_cls.Cycle==BaseExecutor.Cycle)):
@@ -240,7 +246,7 @@ class BaseComponent(Jsonable):
     def state(self, json2state: Dict[str, Any]) -> None:
         self._state = State(data=json2state)
 
-    def static_check(self,task_name:str,model_name:str):
+    def static_check(self, task_name: str, model_name: str):
         """
         description
         ---------
@@ -257,10 +263,10 @@ class BaseComponent(Jsonable):
 
         Returns
         -------
-        
+
         Raises
         -------
-        
+
         """
         raise Exception("must be extended")
     """
@@ -268,6 +274,7 @@ class BaseComponent(Jsonable):
     组件序列化后，编排器再执行的时候会根据这个flag判断是否要清空之前的数据。这样就会有一个问题，
     如果是cycle类型的组件，进程挂了后，再重启，会导致数据被删除，以后考虑将这个过程作为动态过程
     """
+
     def dynamic_check(self):
         """
         description
@@ -275,44 +282,114 @@ class BaseComponent(Jsonable):
         这个是当组件在实际被driver执行时的动态check过程
         Args
         -------
-        
+
         Returns
         -------
-        
+
         Raises
         -------
-        
+
         """
         raise Exception("must be extended")
-    
-    def extra_svc_port_internal(self)->List[Tuple[str,str,int]]:
+
+    def extra_svc_port_internal(self) -> List[Tuple[str, str, int]]:
         """组件的运行需要暴露的端口
         有些时候，框架由于拓展性，组件可能需要自己运行一个server一类的程序，这个时候需要暴露端口出去，因此可以返回一个list：
         [("ts","TCP",8080),...],这里ts表示使用了torch serving框架
         """
-        return []
-    def extra_svc_port_user(self)->List[Tuple[str,str,int]]:
+        return [(global_config.project_name, "TCP", global_config.SERVERPORT)]
+
+    def extra_svc_port_user(self) -> List[Tuple[str, str, int]]:
         """用户需要暴露的端口
         """
         return []
-    def extra_pod_containers_internal(self)->List[PodContainer]:
+
+    def extra_pod_containers_internal(self, workflow_name="") -> List[PodContainer]:
         """框架需要的其他容器
         description
         ---------
         如果组件需要运行其他的服务，可以将其他的进程运行在其他的容器里。正常而言是不需要再运行
-        其他服务，但举个例子，modelserving组件需要torchserving这么一个进程
+        其他服务，但举个例子，modelserving组件需要torchserving这么一个进程；再比如leader选举，需要
         Args
         -------
-        
+
         Returns
         -------
-        
+
         Raises
         -------
-        
+
         """
-        return []
-    def extra_pod_containers_user(self)->List[PodContainer]:
+        leader_election = PodContainer("leader")
+        leader_election.command = ['leaderElection']
+        leader_election.args = ["--election",
+                                NameForComponentLeaseName(workflow_name, self.id),
+                                "--election-namespace",
+                                "$({})".format(NAMESPACE_ENV),
+                                "--id",
+                                leader_election_id_format.format(
+                                    INSTANCE_ID=INSTANCEID_ENV,
+                                    POD_IP=IP_ENV,
+                                ),
+                                "--use-cluster-credentials"
+                                ]
+        leader_election.image = IMAGE
+        leader_election.SetReadinessProbe([str(PORT), LEADERURL])
+        leader_election.SetLivenessProbe([str(PORT), LEADERURL])
+        return [leader_election]
+
+    def extra_pod_containers_user(self, workflow_name="") -> List[PodContainer]:
         """用户需要的容器
         """
         return []
+
+    def get_parallel(self):
+        """获得组件的并行度
+        """
+        type_check.check_object_not_None(self._executor)
+        return self._executor.parallel
+
+
+class GlobalComponent(BaseComponent):
+    def __init__(self,
+                 alias_model_name: str,
+                 alias_component_id: str,
+                 inputs: Optional[List] = None):
+        """获取全局共享组件
+        description
+        ---------
+
+        Args
+        -------
+        model_name:从哪个model里面获取组件
+
+        component_id：组件的id
+
+        Returns
+        -------
+
+        Raises
+        -------
+
+        """
+        self._alias_model_name = alias_model_name.lower()
+        self._alias_component_id = alias_component_id.lower()
+        super().__init__(executor=BaseExecutor(),
+                         inputs=inputs,
+                         shared=True)
+
+    @property
+    def alias_model_name(self):
+        return self._alias_model_name
+
+    @alias_model_name.setter
+    def alias_model_name(self, model: str):
+        self._alias_model_name = model
+
+    @property
+    def alias_component_id(self):
+        return self._alias_component_id
+
+    @alias_component_id.setter
+    def alias_component_id(self, component: str):
+        self._alias_component_id = component

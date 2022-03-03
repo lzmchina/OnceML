@@ -105,7 +105,7 @@ class _executor(BaseExecutor):
 
 class CycleDataFeaturing(BaseComponent):
     def __init__(self, feature_func: FunctionType,
-                 data_preprocess: BaseComponent, **args):
+                 data_preprocess: BaseComponent,parallel=1, **args):
         """
         description
         ---------   
@@ -119,6 +119,7 @@ class CycleDataFeaturing(BaseComponent):
         它应该返回一个list或者迭代器，list的最高维应该是样本数目，每一个元素应该是三元组（timestamp,x_data,y_label）
         把x与y分开是为了模型集成
 
+        parallel:组件的并行度
 
 
         Returns
@@ -130,7 +131,7 @@ class CycleDataFeaturing(BaseComponent):
         """
         if not isinstance(data_preprocess, BaseComponent):
             exception.TypeNotAllowedError("data_preprocess应该是BaseComponent的子类")
-        super().__init__(executor=_executor,
+        super().__init__(executor=_executor(parallel=parallel),
                          inputs=[data_preprocess],
                          checkpoint=channel.OutputChannel(int),
                          max_timestamp=channel.OutputChannel(int),

@@ -1,5 +1,5 @@
 import onceml.global_config as global_config
-
+# 组件本身的pod、svc的label
 COMPONENT_POD_LABEL = '{}.component.id'.format(
     global_config.project_name).lower()
 COMPONENT_POD_LABEL_VALUE='{}.{}.{}.{}'

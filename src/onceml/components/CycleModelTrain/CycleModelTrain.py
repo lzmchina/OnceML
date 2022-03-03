@@ -21,7 +21,7 @@ from onceml.utils.time import get_timestamp
 from queue import Queue
 from http.server import BaseHTTPRequestHandler
 import onceml.configs.k8sConfig as k8sConfig
-import onceml.utils.pipeline_utils as pipeline_utils
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 import onceml.utils.k8s_ops as k8s_ops
 from onceml.utils.http import asyncMsg, asyncMsgByHost, asyncMsgGet
 import onceml.global_config as global_config
@@ -33,8 +33,8 @@ from deprecated.sphinx import deprecated
 
 
 class _executor(BaseExecutor):
-    def __init__(self):
-        super().__init__()
+    def __init__(self,**args):
+        super().__init__(**args)
         self.component_state = {}
         self.ensemble_feedback_queue = Queue()
         """存放上游组件的版本信息"""
@@ -587,6 +587,7 @@ class CycleModelTrain(BaseComponent):
                  emsemble_models: list = [],
                  max_checkpoint_store=1,
                  max_trial=1,
+                 parallel=1,
                  **args):
         """
         description
@@ -617,7 +618,7 @@ class CycleModelTrain(BaseComponent):
 
         """
 
-        super().__init__(executor=_executor,
+        super().__init__(executor=_executor(parallel=parallel),
                          inputs=[feauture_component],
                          checkpoint=channel.OutputChannel(int),
                          model_generator_cls=model_generator_cls,

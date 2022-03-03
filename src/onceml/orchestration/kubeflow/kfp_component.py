@@ -2,7 +2,7 @@ from kfp import dsl
 from typing import Set, Dict, List
 from kubernetes.client.models import V1ContainerPort
 import onceml.components.base.base_component as base_component
-import onceml.components.base.global_component as global_component
+import onceml.components.base.base_component as global_component
 import onceml.utils.json_utils as json_utils
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
 import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
@@ -10,7 +10,7 @@ import json
 import onceml.utils.k8s_ops as k8s_ops
 import onceml.global_config as global_config
 import os
-import onceml.utils.pipeline_utils as pipeline_utils
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 import onceml.types.component_msg as component_msg
 import onceml.configs.k8sConfig as k8sConfig
 

@@ -10,10 +10,11 @@ docker push liziming/onceml-requirements
 docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.80.19:21087" -t liziming/onceml:0.0.1
 
 docker build . -f Dockerfile/test.Dockerfile   -t liziming/onceml:0.0.1
-
+docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.80.19:21087" -t registry.cn-hangzhou.aliyuncs.com/liziming/onceml
 sudo docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=172.27.156.240:7890" -t liziming/onceml
 docker build . -f Dockerfile/test.Dockerfile  --build-arg "HTTPS_PROXY=114.212.80.19:21087" -t liziming/onceml
 docker push  liziming/onceml:latest
+docker push registry.cn-hangzhou.aliyuncs.com/liziming/onceml
 ### NFS server
 https://hub.docker.com/r/itsthenetwork/nfs-server-alpine
 

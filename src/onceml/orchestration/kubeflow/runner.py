@@ -1,14 +1,14 @@
 from typing import List
 import kfp
-from onceml.orchestration.runner import BaseRunner
-from onceml.orchestration import Pipeline
+from onceml.orchestration.base.runner import BaseRunner
+from onceml.orchestration.base.pipeline import Pipeline
 from onceml.components.base import BaseComponent, GlobalComponent
 from kfp import compiler
 from kfp import dsl
 import os
 from onceml.utils import logger
 import onceml.utils.json_utils as json_utils
-import onceml.utils.pipeline_utils as pipeline_utils
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 import onceml.orchestration.kubeflow.kfp_component as Kfp_component
 import onceml.orchestration.kubeflow.kfp_ops as kfp_ops
 import onceml.utils.k8s_ops as k8s_ops

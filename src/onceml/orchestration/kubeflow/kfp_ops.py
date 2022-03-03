@@ -6,11 +6,11 @@ import sys
 import os
 import onceml.types.exception as exception
 import onceml.orchestration.kubeflow.kfp_config as kfp_config
-from onceml.orchestration.pipeline import Pipeline
+from onceml.orchestration.base.pipeline import Pipeline
 import onceml.utils.k8s_ops as k8s_ops
 import onceml.utils.db as db
 import onceml.global_config as global_config
-import onceml.components.base.global_component as global_component
+import onceml.components.base.base_component as global_component
 
 
 def exist_experiment(client: kfp.Client, experiment_name: str):

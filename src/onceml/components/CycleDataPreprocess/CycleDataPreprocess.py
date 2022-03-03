@@ -83,7 +83,7 @@ class _executor(BaseExecutor):
         #os.makedirs(os.path.join(data_dir, "extras"),exist_ok=True)
 
 class CycleDataPreprocess(BaseComponent):
-    def __init__(self, file_parse_func: FunctionType, data_source:BaseComponent,**args):
+    def __init__(self, file_parse_func: FunctionType, data_source:BaseComponent,parallel=1,**args):
         """
         description
         ---------
@@ -94,6 +94,7 @@ class CycleDataPreprocess(BaseComponent):
         file_parse_func:解析文件的函数，需要用户自己提供，会给定一个文件的url，有用户自己定义怎样解析，怎样预处理
         用户需要在这个函数里返回一个python对象，组件再调用这个迭代器，去生成python对象数组，最后保存成二进制文件
 
+        parallel:组件的并行度
 
         Returns
         -------
@@ -105,7 +106,7 @@ class CycleDataPreprocess(BaseComponent):
         if  (not isinstance(data_source,BaseComponent)):
             exception.TypeNotAllowedError("data_source应该是BaseComponent的子类")
         super().__init__(file_parse_func=file_parse_func,
-                         executor=_executor,
+                         executor=_executor(parallel),
                          inputs=[data_source],
                          checkpoint=channel.OutputChannel(int),
                          **args)

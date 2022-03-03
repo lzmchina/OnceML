@@ -8,11 +8,8 @@
 
 @version	:0.0.1
 '''
-import onceml.components.base.base_component as base_component
-
-
-def judge_update(before_component: base_component.BaseComponent,
-                 current_component: base_component.BaseComponent):
+def judge_update(before_component,
+                 current_component):
     '''判断先后两个组件是否可以进行数据复用
 
     @Date	:2021/10/21 01:29:16

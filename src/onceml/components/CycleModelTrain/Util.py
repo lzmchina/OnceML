@@ -2,8 +2,9 @@ import os
 import re
 import sys
 import time
+from onceml.orchestration.base import pipeline_utils
 
-from onceml.utils import k8s_ops, logger, pipeline_utils
+from onceml.utils import k8s_ops, logger
 import onceml.configs.k8sConfig as k8sConfig
 import onceml.global_config as global_config
 

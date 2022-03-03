@@ -71,6 +71,7 @@ class Containerop():
         self.labels: Dict[str, Any] = {}
         self.volumes: List[V1Volume] = []
         self.svcs: List[Tuple[str, str, str]] = []
+        self.replicas = 0
 
     def add_pod_label(self, name: str, value: str):
         '''给pod增加label
@@ -111,9 +112,16 @@ class Containerop():
             "containers": self.containers,
             "labels": self.labels,
             "volumes": self.volumes,
-            "svcs": self.svcs
+            "svcs": self.svcs,
+            "replicas": self.replicas
         }
         return to_yaml(output_dict)
+
+    def set_replicas(self, replicas):
+        '''设置组件的并行副本数
+        '''
+        
+        self.replicas = replicas
 
 
 class Workflow():

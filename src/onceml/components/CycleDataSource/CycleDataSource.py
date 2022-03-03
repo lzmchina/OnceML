@@ -20,7 +20,7 @@ class _executor(BaseExecutor):
             if os.path.isdir(
                     os.path.join(params['listen_data_dir'],
                                  file)) and self.file_name_pattern.match(file):
-                #如果是batch-{}模式，且是文件夹，则进行相应的处理
+                # 如果是batch-{}模式，且是文件夹，则进行相应的处理
                 id = int(file.split("-")[1])
                 if id > state["currentId"]:
                     batch_dirs.append(id)
@@ -50,13 +50,12 @@ class _executor(BaseExecutor):
     def pre_execute(self, state: State, params: dict, data_dir: str):
         print('this is pre_execute')
         self.file_name_pattern = re.compile("^batch-\d+$")
-        #创建一个文件夹，放入用户需要的其他文件
+        # 创建一个文件夹，放入用户需要的其他文件
         # os.makedirs(os.path.join(data_dir, "extras"),exist_ok=True)
-        
 
 
 class CycleDataSource(BaseComponent):
-    def __init__(self, listen_data_dir: str, **args):
+    def __init__(self, listen_data_dir: str, parallel=1, **args):
         """
         description
         ---------
@@ -74,14 +73,14 @@ class CycleDataSource(BaseComponent):
 
         Returns
         -------
-        
+
         Raises
         -------
-        
+
         """
 
         super().__init__(listen_data_dir=listen_data_dir,
-                         executor=_executor,
+                         executor=_executor(parallel=parallel),
                          inputs=None,
                          checkpoint=channel.OutputChannel(int),
                          **args)

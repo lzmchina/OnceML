@@ -20,14 +20,14 @@ from .Utils import generate_onceml_config_json, queryModelIsExist, registerModel
 import pathlib
 from onceml.utils.json_utils import objectDumps
 import onceml.global_config as global_config
-import onceml.utils.pipeline_utils as pipeline_utils
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 from deprecated.sphinx import deprecated
 from onceml.types.component_msg import Component_Data_URL
 
 
 class _executor(BaseExecutor):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **args):
+        super().__init__(**args)
         self.ensemble_models = []
         '''
         model serving template class
@@ -181,11 +181,11 @@ class _executor(BaseExecutor):
 
 
 class CycleModelServing(BaseComponent):
-    def __init__(self, model_generator_component: BaseComponent, model_serving_cls, ensemble_models: list = [], **args):
+    def __init__(self, model_generator_component: BaseComponent, model_serving_cls, ensemble_models: list = [], parallel=1, **args):
         """部署模型
         接收modelGenerator的更新的模型的消息，从而对部署的模型进行更新
         """
-        super().__init__(executor=_executor,
+        super().__init__(executor=_executor(parallel=parallel),
                          inputs=[model_generator_component],
                          model_serving_cls=model_serving_cls,
                          ensemble_models=ensemble_models, **args)
@@ -193,14 +193,10 @@ class CycleModelServing(BaseComponent):
             "model_checkpoint": -1,  # 当前使用的模型的版本号（用模型的时间戳来辨别）
         }
 
-    def extra_svc_port_internal(self) -> List[Tuple[str, str, int]]:
-        return [("ts", "TCP", TS_INFERENCE_PORT)]
-
-    def extra_pod_containers_internal(self) -> List[PodContainer]:
+    def extra_pod_containers_user(self,workflow_name) -> List[PodContainer]:
         '''
         注册torch serving
         '''
-        frameworks = super().extra_pod_containers_internal()
         ts = PodContainer("ts")
         ts.command = ['python']
         ts.args = ["-m", "onceml.thirdParty.PyTorchServing.initProcess",
@@ -211,4 +207,7 @@ class CycleModelServing(BaseComponent):
                        Component_Data_URL.ARTIFACTS.value))]
         ts.SetReadinessProbe([str(TS_INFERENCE_PORT), "/ping"])
         ts.SetLivenessProbe([str(TS_INFERENCE_PORT), "/ping"])
-        return frameworks+[ts]
+        return [ts]
+
+    def extra_svc_port_user(self) -> List[Tuple[str, str, int]]:
+        return [("ts", "TCP", TS_INFERENCE_PORT)]

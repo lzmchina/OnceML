@@ -1,7 +1,7 @@
 import json
 from logging import Logger, log
 import time
-from onceml.utils import pipeline_utils
+from onceml.orchestration.base import pipeline_utils
 from onceml.utils.http import syncPost, syncGet
 from onceml.types.ts_config import TsConfig
 from onceml.utils.logger import logger

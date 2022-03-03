@@ -3,7 +3,7 @@ import onceml.utils.db as db
 import onceml.utils.cache as cache
 import onceml.utils.json_utils as json_utils
 import onceml.components.base.base_component as base_component
-import onceml.components.base.global_component as global_component
+import onceml.components.base.base_component as global_component
 import onceml.types.phases as phases
 import os
 import onceml.global_config as global_config
@@ -254,22 +254,29 @@ def update_pipeline_model_component_id(project_name: str, task_name: str,
         '.'.join([task_name, model_name, 'model_component']),
         ".".join([project_name, task_name, model_name, model_component_id]))
 
+
 def update_pipeline_model_serving_component_id(project_name: str, task_name: str,
-                                       model_name: str,
-                                       model_component_id: str):
+                                               model_name: str,
+                                               model_component_id: str):
     """更新model serving的component id
     """
     db.update(
         '.'.join([task_name, model_name, 'serving_component']),
         ".".join([project_name, task_name, model_name, model_component_id]))
+
+
 def delete_pipeline_model_serving_component_id(project_name: str, task_name: str,
-                                       model_name: str,
-                                       model_component_id: str):
+                                               model_name: str,
+                                               model_component_id: str):
     """删除model serving的component id
     """
     db.delete('.'.join([task_name, model_name, 'serving_component']))
+
+
 def get_pipeline_model_serving_component_id(task_name: str, model_name: str):
     return db.select('.'.join([task_name, model_name, 'serving_component']))
+
+
 def update_model_checkpoint(task_name: str, model_name: str, checkpoint: str):
     db.update(".".join([task_name, model_name, 'model_checkpoint']),
               checkpoint)
@@ -283,3 +290,15 @@ def get_pipeline_component_artifact_url(task_name: str, model_name: str, compone
     """获取某个组件的artifact目录
     """
     return os.path.join(global_config.OUTPUTSDIR, task_name, model_name, component, component_msg.Component_Data_URL.ARTIFACTS.value)
+
+
+def generate_pipeline_id(task_name, model_name):
+    """根据task name与model name生成pipeline ID
+    """
+    chars = set('-_/')
+    if any((c in chars) for c in task_name) or any(
+            (c in chars) for c in model_name):
+        raise RuntimeError(
+            "pipeline的task name:%s 或者 model name:%s不能包含 '{}'符号 " %
+            (task_name, model_name, chars))
+    return (str(task_name + '.' + model_name)).lower()

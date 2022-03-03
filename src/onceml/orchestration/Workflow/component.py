@@ -1,10 +1,10 @@
 from typing import Dict, List, Protocol
 from kubernetes.client.models import V1VolumeMount, V1ContainerPort, V1Volume, V1EnvVar, V1PersistentVolumeClaimVolumeSource
 import onceml.components.base.base_component as base_component
-import onceml.utils.pipeline_utils as pipeline_utils
+import onceml.orchestration.base.pipeline_utils as pipeline_utils
 from onceml.orchestration.Workflow.types import Containerop, PodContainer
 import onceml.orchestration.Workflow.config as podconfigs
-import onceml.components.base.global_component as global_component
+import onceml.components.base.base_component as global_component
 import onceml.configs.k8sConfig as k8sConfig
 import onceml.global_config as global_config
 
@@ -65,8 +65,20 @@ class OnceMLComponent:
         ]
         '''加入组件与用户定义的副容器
         '''
-        extra_containers_internal = component.extra_pod_containers_internal()
-        for c in extra_containers_internal:
+        extra_containers_internal = component.extra_pod_containers_internal(
+            workflow_name=podconfigs.generate_workflow_name(
+                project_name, podconfigs.generate_pipeline_id(
+                    task_name=task_name, model_name=model_name)
+            )
+        )
+        extra_containers_user = component.extra_pod_containers_user(
+            workflow_name=podconfigs.generate_workflow_name(
+                project_name, podconfigs.generate_pipeline_id(
+                    task_name=task_name, model_name=model_name)
+            )
+        )
+        extra_containers = extra_containers_internal+extra_containers_user
+        for c in extra_containers:
             if c.image is None:
                 c.image = docker_image or podconfigs.IMAGE
             if c.workingDir is None:
@@ -75,9 +87,7 @@ class OnceMLComponent:
                 c.volumeMounts = [
                     V1VolumeMount(name=pvc_name, mount_path=podconfigs.WORKINGDIR)
                 ]
-        self.containerop.add_pod_containers(extra_containers_internal)
-        extra_containers_user = component.extra_pod_containers_user()
-        self.containerop.add_pod_containers(extra_containers_user)
+        self.containerop.add_pod_containers(extra_containers)
         if component.deploytype == 'Cycle':
             # 如果是Cycle，且不是global组件，则需要增加port配置
             # 因为global组件相当于他别名的组件的替身，可以看作是他别名的组件要向后继组件发送消息
@@ -91,8 +101,7 @@ class OnceMLComponent:
             # 加入组件与用户需要使用svc暴露的端口
             extra_ports_internal = component.extra_svc_port_internal()
             extra_ports_user = component.extra_svc_port_user()
-            self.containerop.add_svcs(extra_ports_internal)
-            self.containerop.add_svcs(extra_ports_user)
+            self.containerop.add_svcs(extra_ports_internal+extra_ports_user)
 
             # 设置pod的label，保证Cycle类型的组件能够打上上游cycle组件的标签，这样上游组件就可以通过label来获取要发送
             # 的组件的list
@@ -131,3 +140,4 @@ class OnceMLComponent:
             V1EnvVar(name='{}ENV'.format(global_config.project_name),
                      value='INPOD')
         ]
+        self.containerop.set_replicas(component.get_parallel())
